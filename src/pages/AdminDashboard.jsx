@@ -19,6 +19,7 @@ const TIMEZONE_OPTIONS = [
 
 export default function AdminDashboard() {
   const { user: authUser } = useAuth();
+  const [adminEmail, setAdminEmail] = useState("");
   const [users, setUsers] = useState([]);
   const [mentors, setMentors] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -104,6 +105,16 @@ export default function AdminDashboard() {
       setMeetings([]);
     }
   }, []);
+
+  // Initialize admin email from localStorage (SSO) or auth user on mount
+  useEffect(() => {
+    const storedEmail = localStorage.getItem("userEmail");
+    if (storedEmail) {
+      setAdminEmail(storedEmail);
+    } else if (authUser?.email) {
+      setAdminEmail(authUser.email);
+    }
+  }, [authUser?.email]);
 
   useEffect(() => {
     loadUsers();
@@ -617,7 +628,7 @@ export default function AdminDashboard() {
                 <label className="block text-sm font-medium text-slate-400 mb-1">Admin email</label>
                 <input
                   type="email"
-                  value={authUser?.email ?? ""}
+                  value={adminEmail}
                   disabled
                   className="w-full rounded-lg bg-slate-950 border border-slate-800 text-slate-400 px-4 py-2 cursor-not-allowed"
                 />

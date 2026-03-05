@@ -9,6 +9,17 @@ export function AuthProvider({ children }) {
 
   const loadUser = useCallback(async () => {
     const token = localStorage.getItem("token");
+    const role = localStorage.getItem("userRole");
+    const userId = localStorage.getItem("userId");
+    const email = localStorage.getItem("userEmail");
+
+    // If we already have fields in localStorage, initialize from there (temporary)
+    if (token && role && userId) {
+      setUser({ token, role, id: userId, email: email || "" });
+      // Do not return here – fall through to /me to get fresh user from DB
+    }
+
+    // Fallback to existing behavior
     if (!token) {
       setUser(null);
       setLoading(false);
@@ -17,6 +28,10 @@ export function AuthProvider({ children }) {
     try {
       const { user: u } = await authApi.me();
       setUser(u);
+      // Keep localStorage email in sync with DB user
+      if (u?.email) {
+        localStorage.setItem("userEmail", u.email);
+      }
     } catch {
       localStorage.removeItem("token");
       setUser(null);

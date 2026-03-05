@@ -3,6 +3,7 @@ import { useAuth } from "./context/AuthContext";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import SSO from "./pages/SSO";
 import UserAvailability from "./pages/UserAvailability";
 import MentorAvailability from "./pages/MentorAvailability";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -50,6 +51,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/sso" element={<SSO />} />
       <Route
         path="/"
         element={

@@ -6,6 +6,8 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const isAdminRoute = location.pathname.startsWith("/admin");
+  console.log("Layout user:", user);
+  const email = user?.email ?? "";
 
   const handleLogout = () => {
     logout();
@@ -41,8 +43,12 @@ export default function Layout() {
   </div>
 </div>
               <div className="flex items-center gap-4">
-                <span className="text-slate-400 text-sm">{user?.email}</span>
                 <span className="text-xs px-2 py-0.5 rounded bg-navy-700 text-slate-300">ADMIN</span>
+                {email && (
+                  <span className="text-slate-400 text-sm mr-2">
+                    {email}
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={handleLogout}
@@ -82,8 +88,12 @@ export default function Layout() {
               </nav>
               </div>
               <div className="flex items-center gap-4">
-                <span className="text-slate-400 text-sm">{user?.email}</span>
                 <span className="text-xs px-2 py-0.5 rounded bg-navy-700 text-slate-300">{user?.role}</span>
+                {email && (
+                  <span className="text-slate-400 text-sm mr-2">
+                    {email}
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={handleLogout}
