@@ -36,9 +36,11 @@ export function AuthProvider({ children }) {
         storage.setItem("userEmail", u.email);
       }
     } catch (err) {
+      console.error("[AuthContext] /me failed:", err?.status, err?.message, err);
       const ssoToken = storage.getItem("token");
       const ssoRole = storage.getItem("userRole");
       const ssoUserId = storage.getItem("userId");
+      console.log("[AuthContext] Storage check:", { ssoToken: !!ssoToken, ssoRole, ssoUserId });
       if (ssoToken && ssoRole && ssoUserId) {
         setUser({
           token: ssoToken,

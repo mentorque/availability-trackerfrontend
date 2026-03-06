@@ -39,6 +39,11 @@ export default function SSO() {
       storage.setItem("userRole", resolvedRole);
       storage.setItem("user", JSON.stringify({ id: userId }));
       if (email) storage.setItem("userEmail", email);
+      console.log("[SSO] sessionStorage after set:", {
+        token: !!sessionStorage.getItem("token"),
+        userRole: sessionStorage.getItem("userRole"),
+        userId: sessionStorage.getItem("userId"),
+      });
     } catch (err) {
       console.error("[SSO] Error setting sessionStorage", err);
       window.location.href = "/welcome";

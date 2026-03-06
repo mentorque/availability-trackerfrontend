@@ -40,6 +40,7 @@ export async function api(method, path, body, options = {}) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (res.status === 401) {
+      console.error("[client] 401 on:", path, "skipAuthRedirect:", options.skipAuthRedirect);
       if (!options.skipAuthRedirect) {
         clearAuthAndRedirectToWelcome(true);
       }
