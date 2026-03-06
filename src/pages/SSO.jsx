@@ -1,89 +1,101 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 
 export default function SSO() {
-  useEffect(() => {
-    console.log("[SSO] Starting SSO handler");
-    console.log("[SSO] window.location.search:", window.location.search);
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get("token");
+  const roleParam = searchParams.get("role");
+  const userId = searchParams.get("userId");
+  const email = searchParams.get("email");
 
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get("token");
-    const role = params.get("role");
-    const userId = params.get("userId");
-    const email = params.get("email");
-
-    
-
-    console.log("[SSO] Parsed params:", { token, role, userId, email });
-
-    // Resolve role, including admin tokens from main site (isAdmin flag) and USER role
-    let resolvedRole = role;
-    if (!resolvedRole && token) {
+  const { resolvedRole, displayEmail } = useMemo(() => {
+    let role = roleParam;
+    if (!role && token) {
       try {
         const payload = JSON.parse(atob(token.split(".")[1]));
-        resolvedRole = payload.role || (payload.isAdmin ? "ADMIN" : "MENTOR");
-        console.log("[SSO] Resolved role from token payload:", payload, "=>", resolvedRole);
-      } catch (err) {
-        console.warn("[SSO] Failed to decode token payload, falling back to role param", err);
-        resolvedRole = role;
+        role = payload.role || (payload.isAdmin ? "ADMIN" : "MENTOR");
+      } catch {
+        role = roleParam;
       }
     }
+    if (!role || role === "undefined") role = "USER";
+    return {
+      resolvedRole: role,
+      displayEmail: email || (userId ? `${userId}@sso` : "—"),
+    };
+  }, [token, roleParam, email, userId]);
 
-    // Fallback: if still missing/undefined, treat as USER
-    if (!resolvedRole || resolvedRole === "undefined") {
-      resolvedRole = "USER";
-    }
-
-    console.log("[SSO] Final resolvedRole:", resolvedRole);
-
+  useEffect(() => {
+    console.log("[SSO] Starting SSO handler");
     if (!token) {
-      console.log("[SSO] Missing token, redirecting to /login");
-      window.location.href = "/login";
+      window.location.href = "/welcome";
       return;
     }
-
     try {
-      console.log("[SSO] Setting localStorage values");
-      localStorage.setItem("token", token);
-      localStorage.setItem("role", resolvedRole);
-      localStorage.setItem("userId", userId);
-      localStorage.setItem("userRole", resolvedRole);
-      localStorage.setItem("user", JSON.stringify({ id: userId }));
-      if (email) {
-        localStorage.setItem("userEmail", email);
-      }
-
-      console.log("[SSO] localStorage set successfully", {
-        token: localStorage.getItem("token"),
-        role: localStorage.getItem("role"),
-        userId: localStorage.getItem("userId"),
-        userRole: localStorage.getItem("userRole"),
-        user: localStorage.getItem("user"),
-      });
+      const storage = sessionStorage;
+      storage.setItem("token", token);
+      storage.setItem("role", resolvedRole);
+      storage.setItem("userId", userId);
+      storage.setItem("userRole", resolvedRole);
+      storage.setItem("user", JSON.stringify({ id: userId }));
+      if (email) storage.setItem("userEmail", email);
     } catch (err) {
-      console.error("[SSO] Error setting localStorage, redirecting to /login", err);
-      window.location.href = "/login";
+      console.error("[SSO] Error setting sessionStorage", err);
+      window.location.href = "/welcome";
       return;
     }
+    try {
+      sessionStorage.setItem(
+        "sso_show_welcome_modal",
+        JSON.stringify({ email: displayEmail, role: resolvedRole })
+      );
+    } catch (_) {}
+    const t = setTimeout(() => {
+      if (resolvedRole === "ADMIN") window.location.href = "/admin";
+      else if (resolvedRole === "MENTOR") window.location.href = "/mentor";
+      else if (resolvedRole === "USER") window.location.href = "/availability";
+      else window.location.href = "/welcome";
+    }, 2200);
+    return () => clearTimeout(t);
+  }, [token, resolvedRole, userId, email]);
 
-    // Redirect based on resolved role
-    if (resolvedRole === "ADMIN") {
-      console.log("[SSO] Redirecting to admin dashboard at /admin");
-      window.location.href = "/admin";
-    } else if (resolvedRole === "MENTOR") {
-      console.log("[SSO] Redirecting to mentor dashboard at /mentor");
-      window.location.href = "/mentor";
-    } else if (resolvedRole === "USER") {
-      console.log("[SSO] Redirecting to user availability at /availability");
-      window.location.href = "/availability";
-    } else {
-      console.log("[SSO] Unknown or missing role, redirecting to /login");
-      window.location.href = "/login";
-    }
-  }, []);
+  if (!token) {
+    return null;
+  }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-navy-950">
-      <div className="text-slate-400">Signing you in...</div>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-navy-950/95 backdrop-blur-sm p-4">
+      <div
+        className="bg-navy-900 border-2 border-blue-500/50 rounded-2xl shadow-2xl p-10 max-w-lg w-full text-center"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sso-modal-title"
+      >
+        <p id="sso-modal-title" className="text-slate-400 text-lg mb-6">
+          Logging you in…
+        </p>
+        <p className="text-white text-xl sm:text-2xl font-bold mb-3 break-all">
+          {displayEmail}
+        </p>
+        <p className="text-blue-400 text-xl sm:text-2xl font-semibold">
+          {resolvedRole}
+        </p>
+        <div className="mt-8 h-2 w-full max-w-xs mx-auto rounded-full bg-navy-700 overflow-hidden">
+          <div
+            className="h-full bg-blue-500 rounded-full sso-progress-bar"
+            style={{ width: "100%" }}
+          />
+        </div>
+      </div>
+      <style>{`
+        .sso-progress-bar {
+          animation: sso-shrink 2.2s linear forwards;
+        }
+        @keyframes sso-shrink {
+          from { width: 100%; }
+          to { width: 0%; }
+        }
+      `}</style>
     </div>
   );
 }

@@ -7,19 +7,23 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const loadUser = useCallback(async () => {
-    const token = localStorage.getItem("token");
-    const role = localStorage.getItem("userRole");
-    const userId = localStorage.getItem("userId");
-    const email = localStorage.getItem("userEmail");
+  const getStorage = useCallback(() => {
+    return typeof sessionStorage !== "undefined" && sessionStorage.getItem("token")
+      ? sessionStorage
+      : localStorage;
+  }, []);
 
-    // If we already have fields in localStorage, initialize from there (temporary)
+  const loadUser = useCallback(async () => {
+    const storage = getStorage();
+    const token = storage.getItem("token");
+    const role = storage.getItem("userRole");
+    const userId = storage.getItem("userId");
+    const email = storage.getItem("userEmail");
+
     if (token && role && userId) {
       setUser({ token, role, id: userId, email: email || "" });
-      // Do not return here – fall through to /me to get fresh user from DB
     }
 
-    // Fallback to existing behavior
     if (!token) {
       setUser(null);
       setLoading(false);
@@ -28,32 +32,36 @@ export function AuthProvider({ children }) {
     try {
       const { user: u } = await authApi.me();
       setUser(u);
-      // Keep localStorage email in sync with DB user
       if (u?.email) {
-        localStorage.setItem("userEmail", u.email);
+        storage.setItem("userEmail", u.email);
       }
-    } catch {
-      // Only clear if this wasn't an SSO login
-      // For SSO users, keep the token and still set user from localStorage
-      const ssoToken = localStorage.getItem("token");
-      const ssoRole = localStorage.getItem("userRole");
-      const ssoUserId = localStorage.getItem("userId");
+    } catch (err) {
+      if (err?.status === 401) {
+        for (const key of ["token", "userRole", "userId", "userEmail", "role", "user"]) {
+          sessionStorage.removeItem(key);
+          localStorage.removeItem(key);
+        }
+        setUser(null);
+        return;
+      }
+      const ssoToken = storage.getItem("token");
+      const ssoRole = storage.getItem("userRole");
+      const ssoUserId = storage.getItem("userId");
       if (ssoToken && ssoRole && ssoUserId) {
-        // Keep SSO user logged in even if /me fails
         setUser({
           token: ssoToken,
           role: ssoRole,
           id: ssoUserId,
-          email: localStorage.getItem("userEmail") || "",
+          email: storage.getItem("userEmail") || "",
         });
       } else {
-        localStorage.removeItem("token");
+        storage.removeItem("token");
         setUser(null);
       }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [getStorage]);
 
   useEffect(() => {
     loadUser();
@@ -61,20 +69,25 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (email, password) => {
     const { user: u, token } = await authApi.login({ email, password });
-    localStorage.setItem("token", token);
+    const storage = getStorage();
+    storage.setItem("token", token);
     setUser(u);
     return u;
-  }, []);
+  }, [getStorage]);
 
   const register = useCallback(async (data) => {
     const { user: u, token } = await authApi.register(data);
-    localStorage.setItem("token", token);
+    const storage = getStorage();
+    storage.setItem("token", token);
     setUser(u);
     return u;
-  }, []);
+  }, [getStorage]);
 
   const logout = useCallback(() => {
-    localStorage.removeItem("token");
+    for (const key of ["token", "userRole", "userId", "userEmail", "role", "user"]) {
+      sessionStorage.removeItem(key);
+      localStorage.removeItem(key);
+    }
     setUser(null);
   }, []);
 

@@ -1,7 +1,23 @@
 const API_URL = import.meta.env.VITE_API_URL || "";
 
 function getToken() {
-  return localStorage.getItem("token");
+  return sessionStorage.getItem("token") || localStorage.getItem("token");
+}
+
+function clearAuthAndRedirectToWelcome(expired = false) {
+  for (const key of ["token", "userRole", "userId", "userEmail", "role", "user"]) {
+    sessionStorage.removeItem(key);
+    localStorage.removeItem(key);
+  }
+  const q = expired ? "?expired=1" : "";
+  window.location.href = `/welcome${q}`;
+}
+
+function redirectToRoleDashboardOrWelcome() {
+  const role = sessionStorage.getItem("userRole") || localStorage.getItem("userRole");
+  const path =
+    role === "ADMIN" ? "/admin" : role === "MENTOR" ? "/mentor" : "/availability";
+  window.location.href = path;
 }
 
 export async function api(method, path, body, options = {}) {
@@ -23,6 +39,19 @@ export async function api(method, path, body, options = {}) {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    if (res.status === 401) {
+      clearAuthAndRedirectToWelcome(true);
+      const err = new Error("Session expired");
+      err.status = 401;
+      throw err;
+    }
+    if (res.status === 403) {
+      redirectToRoleDashboardOrWelcome();
+      const err = new Error("Redirecting");
+      err.status = 403;
+      err.data = data;
+      throw err;
+    }
     const err = new Error(data.error || res.statusText);
     err.status = res.status;
     err.data = data;
