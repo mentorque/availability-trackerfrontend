@@ -49,6 +49,7 @@ export default function SSO() {
       window.location.href = "/welcome";
       return;
     }
+
     try {
       sessionStorage.setItem(
         "sso_show_welcome_modal",
@@ -56,33 +57,36 @@ export default function SSO() {
       );
     } catch (_) {}
 
+    function doRedirect() {
+      console.log("[SSO] Redirecting for role:", resolvedRole);
+      if (resolvedRole === "ADMIN") window.location.href = "/admin";
+      else if (resolvedRole === "MENTOR") window.location.href = "/mentor";
+      else window.location.href = "/availability";
+    }
+
     let cancelled = false;
     const HEALTH_URL = `${import.meta.env.VITE_API_URL || ""}/health`;
-    const MAX_WAIT = 60000; // 60 seconds max
-    const INTERVAL = 2000; // ping every 2 seconds
+    const MAX_WAIT = 60000;
+    const INTERVAL = 2000;
     const start = Date.now();
 
     async function waitForBackendAndRedirect() {
+      console.log("[SSO] Pinging health:", HEALTH_URL);
       while (!cancelled && Date.now() - start < MAX_WAIT) {
         try {
           const res = await fetch(HEALTH_URL);
+          console.log("[SSO] Health response status:", res.status);
           if (res.ok) {
-            if (!cancelled) {
-              if (resolvedRole === "ADMIN") window.location.href = "/admin";
-              else if (resolvedRole === "MENTOR") window.location.href = "/mentor";
-              else window.location.href = "/availability";
-            }
+            if (!cancelled) doRedirect();
             return;
           }
-        } catch (_) {}
+        } catch (err) {
+          console.warn("[SSO] Health ping failed:", err.message);
+        }
         await new Promise((r) => setTimeout(r, INTERVAL));
       }
-      // If backend never woke up, redirect anyway
-      if (!cancelled) {
-        if (resolvedRole === "ADMIN") window.location.href = "/admin";
-        else if (resolvedRole === "MENTOR") window.location.href = "/mentor";
-        else window.location.href = "/availability";
-      }
+      console.warn("[SSO] Max wait reached, redirecting anyway");
+      if (!cancelled) doRedirect();
     }
 
     waitForBackendAndRedirect();
@@ -131,5 +135,3 @@ export default function SSO() {
     </div>
   );
 }
-
- 

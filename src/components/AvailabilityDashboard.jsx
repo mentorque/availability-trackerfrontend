@@ -27,7 +27,7 @@ export default function AvailabilityDashboard({ role = "USER" }) {
   const [displayTimezone, setDisplayTimezone] = useState(user?.timezone || "UTC");
   const [weekStart, setWeekStart] = useState(getWeekStartStr(new Date()));
   const [data, setData] = useState({ dates: [], availability: {} });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!user); // only show loading if no user yet
   const [saving, setSaving] = useState(false);
   const [toggles, setToggles] = useState({});
   const [error, setError] = useState("");
@@ -36,6 +36,7 @@ export default function AvailabilityDashboard({ role = "USER" }) {
   const [selectorHour, setSelectorHour] = useState(0);
 
   const fetchWeekly = useCallback(async () => {
+    if (!user) return; // wait for auth to be ready
     setLoading(true);
     setError("");
     try {
@@ -47,10 +48,10 @@ export default function AvailabilityDashboard({ role = "USER" }) {
     } finally {
       setLoading(false);
     }
-  }, [weekStart]);
+  }, [weekStart, user]); // user added as dependency
 
   useEffect(() => {
-    fetchWeekly();
+    if (user) fetchWeekly(); // only fetch when user is available
   }, [fetchWeekly]);
 
   const isSlotEnabled = (dateStr, hour) => {
@@ -124,7 +125,6 @@ export default function AvailabilityDashboard({ role = "USER" }) {
   const weekMin = data.dates[0] || "";
   const weekMax = data.dates[6] || "";
 
-  /** selectorDate is UTC date (YYYY-MM-DD), selectorHour is UTC hour index (0-23). */
   const isSelectorSlotDisabled =
     selectorDate !== "" && isSlotDisabled(selectorDate, selectorHour);
 
@@ -138,7 +138,6 @@ export default function AvailabilityDashboard({ role = "USER" }) {
     setToggles({});
   };
 
-  /** Format UTC hour slot (0-23) for display in current timezone. */
   const formatTimeOptionLabel = (utcHourIndex) => {
     const startISO = new Date(Date.UTC(2000, 0, 1, utcHourIndex, 0)).toISOString();
     const endISO = new Date(Date.UTC(2000, 0, 1, utcHourIndex + 1, 0)).toISOString();
