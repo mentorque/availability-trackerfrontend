@@ -2,40 +2,40 @@
  * Frontend time handling: display in user's timezone (UTC or IST), send UTC to API.
  */
 
-const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+import { DateTime } from "luxon";
+
+function resolveIanaZone(timezone) {
+  // Never hardcode offsets; always use IANA zones so DST is handled automatically.
+  if (timezone === "IST") return "Asia/Kolkata";
+  // In this app, the "UTC/GMT" option is used for Ireland/UK-style time.
+  // Use Europe/Dublin so Ireland DST (IST / Irish Summer Time) is handled.
+  if (timezone === "UTC") return "Europe/Dublin";
+  return timezone || "UTC";
+}
 
 export function getUserOffsetMs(timezone) {
-  if (timezone === "IST") return IST_OFFSET_MS;
-  return 0;
+  const zone = resolveIanaZone(timezone);
+  return DateTime.now().setZone(zone).offset * 60 * 1000;
 }
 
 export function toLocalISO(date, timezone) {
-  const d = new Date(date);
-  if (timezone === "IST") {
-    return new Date(d.getTime() + IST_OFFSET_MS);
-  }
-  return d;
+  const zone = resolveIanaZone(timezone);
+  return DateTime.fromJSDate(new Date(date), { zone: "utc" }).setZone(zone).toJSDate();
 }
 
 export function formatDateLocal(dateStr, timezone) {
-  const d = typeof dateStr === "string" ? new Date(dateStr + "T00:00:00Z") : new Date(dateStr);
-  const local = timezone === "IST" ? new Date(d.getTime() + IST_OFFSET_MS) : d;
-  return local.toLocaleDateString("en-IN", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    timeZone: timezone === "IST" ? "Asia/Kolkata" : "UTC",
-  });
+  const zone = resolveIanaZone(timezone);
+  const iso =
+    typeof dateStr === "string"
+      ? `${dateStr}T00:00:00Z`
+      : DateTime.fromJSDate(new Date(dateStr), { zone: "utc" }).toISO();
+  const dt = DateTime.fromISO(iso, { zone: "utc" }).setZone(zone);
+  return dt.toFormat("ccc, LLL d");
 }
 
 export function formatTimeLocal(isoString, timezone) {
-  const d = new Date(isoString);
-  return d.toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: timezone === "IST" ? "Asia/Kolkata" : "UTC",
-  });
+  const zone = resolveIanaZone(timezone);
+  return DateTime.fromISO(isoString, { zone: "utc" }).setZone(zone).toFormat("HH:mm");
 }
 
 export function formatTo12Hour(timeStr) {
@@ -111,16 +111,10 @@ export function slotToUTC(dateStr, hour) {
 
 /** Parse local time (HH:mm) on date (YYYY-MM-DD) in user timezone to UTC ISO */
 export function localToUTC(dateStr, timeStr, timezone) {
-  const [h, m] = timeStr.split(":").map(Number);
-  if (timezone === "IST") {
-    const local = new Date(dateStr + "T00:00:00Z");
-    local.setUTCHours(h, m, 0, 0);
-    local.setTime(local.getTime() - IST_OFFSET_MS);
-    return local.toISOString();
-  }
-  const d = new Date(dateStr + "T00:00:00.000Z");
-  d.setUTCHours(h, m, 0, 0);
-  return d.toISOString();
+  const zone = resolveIanaZone(timezone);
+  const dt = DateTime.fromFormat(`${dateStr} ${timeStr}`, "yyyy-MM-dd HH:mm", { zone });
+  if (!dt.isValid) return new Date(`${dateStr}T${timeStr}:00.000Z`).toISOString();
+  return dt.toUTC().toISO();
 }
 
 export function getWeekDates(weekStartStr) {
@@ -136,22 +130,28 @@ export function getWeekDates(weekStartStr) {
 
 /** Convert UTC (date, hour) to IST (date, hour) for display */
 export function convertUTCToIST(utcDateStr, utcHour) {
-  const utcMoment = new Date(utcDateStr + "T00:00:00.000Z");
-  utcMoment.setUTCHours(utcHour, 0, 0, 0);
-  const istMoment = new Date(utcMoment.getTime() + IST_OFFSET_MS);
+  const utcMoment = DateTime.fromISO(`${utcDateStr}T00:00:00Z`, { zone: "utc" }).set({
+    hour: utcHour,
+    minute: 0,
+    second: 0,
+    millisecond: 0,
+  });
+  const istMoment = utcMoment.setZone("Asia/Kolkata");
   return {
     dateStr: istMoment.toISOString().slice(0, 10),
-    hour: istMoment.getUTCHours(),
+    hour: istMoment.hour,
   };
 }
 
 /** Convert (UTC date column + IST hour) to UTC (date, hour) for storage */
 export function convertISTToUTC(utcDateStr, istHour) {
-  const base = new Date(utcDateStr + "T00:00:00.000Z").getTime();
-  const utcMoment = new Date(base + (istHour - 5.5) * 3600000);
+  const istMoment = DateTime.fromISO(`${utcDateStr}T00:00:00Z`, { zone: "utc" })
+    .setZone("Asia/Kolkata")
+    .set({ hour: istHour, minute: 0, second: 0, millisecond: 0 });
+  const utcMoment = istMoment.toUTC();
   return {
     utcDateStr: utcMoment.toISOString().slice(0, 10),
-    utcHour: utcMoment.getUTCHours(),
+    utcHour: utcMoment.hour,
   };
 }
 
