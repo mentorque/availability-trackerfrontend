@@ -2,6 +2,8 @@ import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import UserDashboard from "./pages/UserDashboard";
 import UserAvailability from "./pages/UserAvailability";
 import MentorAvailability from "./pages/MentorAvailability";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -17,8 +19,8 @@ function ProtectedRoute({ children, allowedRoles }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-navy-950">
-        <div className="text-slate-400">Loading...</div>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8F8F7' }}>
+        <div style={{ fontSize: '13px', color: '#9CA3AF' }}>Loading…</div>
       </div>
     );
   }
@@ -40,15 +42,15 @@ function DefaultRedirect() {
   const loginTo = location.search ? `${LOGIN_PATH}${location.search}` : LOGIN_PATH;
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-navy-950">
-        <div className="text-slate-400">Loading...</div>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8F8F7' }}>
+        <div style={{ fontSize: '13px', color: '#9CA3AF' }}>Loading…</div>
       </div>
     );
   }
   if (!user) return <Navigate to={loginTo} replace />;
   if (user.role === "MENTOR") return <Navigate to="/mentor" replace />;
   if (user.role === "ADMIN") return <Navigate to="/admin" replace />;
-  return <Navigate to="/availability" replace />;
+  return <Navigate to="/user" replace />;
 }
 
 function NormalizePathname({ children }) {
@@ -66,17 +68,19 @@ export default function App() {
     <NormalizePathname>
       <Routes>
         <Route path={LOGIN_PATH} element={<Login />} />
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <Layout />
-          </ProtectedRoute>
-        }
-      >
-        <Route index element={<DefaultRedirect />} />
+        <Route path="/signup" element={<Signup />} />
+        
+        {/* Full-page layouts (have their own sidebar/header) */}
         <Route
-          path="availability"
+          path="/user"
+          element={
+            <ProtectedRoute allowedRoles={["USER"]}>
+              <UserDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/availability"
           element={
             <ProtectedRoute allowedRoles={["USER", "ADMIN"]}>
               <UserAvailability />
@@ -84,7 +88,7 @@ export default function App() {
           }
         />
         <Route
-          path="mentor"
+          path="/mentor"
           element={
             <ProtectedRoute allowedRoles={["MENTOR"]}>
               <MentorAvailability />
@@ -92,32 +96,44 @@ export default function App() {
           }
         />
         <Route
-          path="admin"
+          path="/admin"
           element={
             <ProtectedRoute allowedRoles={["ADMIN"]}>
               <AdminDashboard />
             </ProtectedRoute>
           }
         />
+        
+        {/* Sub-routes that use Layout wrapper */}
         <Route
-          path="admin/mentors"
+          path="/"
           element={
-            <ProtectedRoute allowedRoles={["ADMIN"]}>
-              <AdminMentors />
+            <ProtectedRoute>
+              <Layout />
             </ProtectedRoute>
           }
-        />
-        <Route
-          path="admin/settings"
-          element={
-            <ProtectedRoute allowedRoles={["ADMIN"]}>
-              <AdminSettings />
-            </ProtectedRoute>
-          }
-        />
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        >
+          <Route index element={<DefaultRedirect />} />
+          <Route
+            path="admin/mentors"
+            element={
+              <ProtectedRoute allowedRoles={["ADMIN"]}>
+                <AdminMentors />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="admin/settings"
+            element={
+              <ProtectedRoute allowedRoles={["ADMIN"]}>
+                <AdminSettings />
+              </ProtectedRoute>
+            }
+          />
+        </Route>
+        
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </NormalizePathname>
   );
 }
