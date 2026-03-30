@@ -682,7 +682,10 @@ export default function AdminDashboard() {
             <div className="w-full md:flex-1 min-w-[220px]">
               <label className="block text-sm font-medium text-slate-400 mb-1">User</label>
               <div className="flex gap-2">
-                <div className="relative flex-1">
+                <div className="relative flex-1 min-w-[260px] group">
+                  <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-500">
+                    <span aria-hidden>🔍</span>
+                  </div>
                   <select
                     value={selectedUser ? selectedUser.id : ""}
                     onChange={(e) => {
@@ -694,18 +697,20 @@ export default function AdminDashboard() {
                       }
                       setSelectedUser(users.find((u) => u.id === id) || null);
                     }}
-                    className="w-full appearance-none rounded-lg bg-slate-900 border border-slate-800 text-white font-medium px-3 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full min-w-[260px] h-11 appearance-none rounded-xl bg-slate-900/80 border border-slate-800 text-white font-medium pl-9 pr-10 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition"
                   >
-                    <option value="">Select user</option>
+                    <option value="" className="text-slate-400 italic">
+                      Search or select user...
+                    </option>
                     {users.map((u) => (
                       <option key={u.id} value={u.id}>
                         {u.name} ({u.email})
                       </option>
                     ))}
                   </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
+                  <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
                     <svg
-                      className="w-4 h-4 text-slate-400"
+                      className="w-4 h-4 text-slate-400 transition-transform group-focus-within:rotate-180"
                       xmlns="http://www.w3.org/2000/svg"
                       viewBox="0 0 20 20"
                       fill="currentColor"
@@ -721,17 +726,21 @@ export default function AdminDashboard() {
                 <button
                   type="button"
                   onClick={() => setShowAddUserModal(true)}
-                  className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-400 hover:bg-slate-700"
+                  disabled={!selectedUser}
+                  className="h-11 rounded-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:hover:bg-slate-800 text-white disabled:text-slate-500 font-medium px-4 transition inline-flex items-center gap-2"
                   title="Add user"
                 >
-                  Add
+                  <span aria-hidden>+</span> Add
                 </button>
               </div>
             </div>
             <div className="w-full md:flex-1 min-w-[220px]">
               <label className="block text-sm font-medium text-slate-400 mb-1">Mentor</label>
               <div className="flex gap-2">
-                <div className="relative flex-1">
+                <div className="relative flex-1 min-w-[260px] group">
+                  <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-500">
+                    <span aria-hidden>🔍</span>
+                  </div>
                   <select
                     value={selectedMentor ? selectedMentor.id : ""}
                     onChange={(e) => {
@@ -743,18 +752,20 @@ export default function AdminDashboard() {
                       }
                       setSelectedMentor(mentors.find((m) => m.id === id) || null);
                     }}
-                    className="w-full appearance-none rounded-lg bg-slate-900 border border-slate-800 text-white font-medium px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full min-w-[260px] h-11 appearance-none rounded-xl bg-slate-900/80 border border-slate-800 text-white font-medium pl-9 pr-10 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition"
                   >
-                    <option value="">Select mentor</option>
+                    <option value="" className="text-slate-400 italic">
+                      Search or select mentor...
+                    </option>
                     {mentors.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.name} ({m.email})
                       </option>
                     ))}
                   </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
+                  <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
                     <svg
-                      className="w-4 h-4 text-slate-400"
+                      className="w-4 h-4 text-slate-400 transition-transform group-focus-within:rotate-180"
                       xmlns="http://www.w3.org/2000/svg"
                       viewBox="0 0 20 20"
                       fill="currentColor"
@@ -770,10 +781,11 @@ export default function AdminDashboard() {
                 <button
                   type="button"
                   onClick={() => setShowAddMentorModal(true)}
-                  className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-400 hover:bg-slate-700"
+                  disabled={!selectedMentor}
+                  className="h-11 rounded-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:hover:bg-slate-800 text-white disabled:text-slate-500 font-medium px-4 transition inline-flex items-center gap-2"
                   title="Add mentor"
                 >
-                  Add
+                  <span aria-hidden>+</span> Add
                 </button>
               </div>
             </div>
