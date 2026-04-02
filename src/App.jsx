@@ -6,6 +6,7 @@ import Register from "./pages/Register";
 import UserAvailability from "./pages/UserAvailability";
 import MentorAvailability from "./pages/MentorAvailability";
 import AdminDashboard from "./pages/AdminDashboard";
+import AdminScheduling from "./pages/AdminScheduling";
 import AdminSettings from "./pages/AdminSettings";
 
 /**
@@ -93,6 +94,7 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<AdminDashboard />} />
                 <Route path="settings" element={<AdminSettings />} />
+                <Route path="scheduling" element={<AdminScheduling />} />
                 <Route path="*" element={<Navigate to="/admin" replace />} />
               </Routes>
             </Layout>
