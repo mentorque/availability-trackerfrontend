@@ -1,19 +1,19 @@
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import Layout from "./components/Layout";
-import SSO from "./pages/SSO";
-import Welcome from "./pages/Welcome";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
 import UserAvailability from "./pages/UserAvailability";
 import MentorAvailability from "./pages/MentorAvailability";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminSettings from "./pages/AdminSettings";
 
-const WELCOME_PATH = "/welcome";
+const LOGIN_PATH = "/login";
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
   const location = useLocation();
-  const welcomeTo = location.search ? `${WELCOME_PATH}${location.search}` : WELCOME_PATH;
+  const loginTo = location.search ? `${LOGIN_PATH}${location.search}` : LOGIN_PATH;
 
   if (loading) {
     return (
@@ -24,7 +24,7 @@ function ProtectedRoute({ children, allowedRoles }) {
   }
 
   if (!user) {
-    return <Navigate to={welcomeTo} replace />;
+    return <Navigate to={loginTo} replace />;
   }
 
   if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
@@ -37,7 +37,7 @@ function ProtectedRoute({ children, allowedRoles }) {
 function DefaultRedirect() {
   const { user, loading } = useAuth();
   const location = useLocation();
-  const welcomeTo = location.search ? `${WELCOME_PATH}${location.search}` : WELCOME_PATH;
+  const loginTo = location.search ? `${LOGIN_PATH}${location.search}` : LOGIN_PATH;
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-navy-950">
@@ -45,7 +45,7 @@ function DefaultRedirect() {
       </div>
     );
   }
-  if (!user) return <Navigate to={welcomeTo} replace />;
+  if (!user) return <Navigate to={loginTo} replace />;
   if (user.role === "MENTOR") return <Navigate to="/mentor" replace />;
   if (user.role === "ADMIN") return <Navigate to="/admin" replace />;
   return <Navigate to="/availability" replace />;
@@ -65,9 +65,8 @@ export default function App() {
   return (
     <NormalizePathname>
       <Routes>
-        <Route path={WELCOME_PATH} element={<Welcome />} />
-        <Route path="/sso" element={<SSO />} />
-        <Route path="/sso/sso" element={<SSO />} />
+        <Route path={LOGIN_PATH} element={<Login />} />
+        <Route path="/register" element={<Register />} />
       <Route
         path="/"
         element={

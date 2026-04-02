@@ -131,7 +131,7 @@ export default function AdminDashboard() {
     meetingsRef.current = meetings;
   }, [meetings]);
 
-  // Initialize admin email from localStorage (SSO) or auth user on mount
+  // Initialize admin email from localStorage or auth user on mount
   useEffect(() => {
     const storedEmail = localStorage.getItem("userEmail");
     if (storedEmail) {

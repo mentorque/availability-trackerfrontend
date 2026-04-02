@@ -1,20 +1,18 @@
 const API_URL = import.meta.env.VITE_API_URL || "";
 
 function getToken() {
-  return sessionStorage.getItem("token") || localStorage.getItem("token");
+  return localStorage.getItem("token");
 }
 
-function clearAuthAndRedirectToWelcome(expired = false) {
-  for (const key of ["token", "userRole", "userId", "userEmail", "role", "user"]) {
-    sessionStorage.removeItem(key);
-    localStorage.removeItem(key);
-  }
+function clearAuthAndRedirectToLogin(expired = false) {
+  localStorage.removeItem("token");
+  localStorage.removeItem("userEmail");
   const q = expired ? "?expired=1" : "";
-  window.location.href = `/welcome${q}`;
+  window.location.href = `/login${q}`;
 }
 
-function redirectToRoleDashboardOrWelcome() {
-  const role = sessionStorage.getItem("userRole") || localStorage.getItem("userRole");
+function redirectToRoleDashboardOrLogin() {
+  const role = localStorage.getItem("userRole");
   const path =
     role === "ADMIN" ? "/admin" : role === "MENTOR" ? "/mentor" : "/availability";
   window.location.href = path;
@@ -24,7 +22,7 @@ export async function api(method, path, body, options = {}) {
   const url = path.startsWith("http") ? path : `${API_URL}${path}`;
   const headers = {
     "Content-Type": "application/json",
-    "Cache-Control": "no-cache, no-store, must-revalidate", // ← add this
+    "Cache-Control": "no-cache, no-store, must-revalidate",
     "Pragma": "no-cache",
     ...options.headers,
   };
@@ -35,7 +33,7 @@ export async function api(method, path, body, options = {}) {
     method,
     headers,
     credentials: "include",
-       cache: "no-store",
+    cache: "no-store",
     ...(body != null && { body: JSON.stringify(body) }),
     ...options,
   });
@@ -45,14 +43,14 @@ export async function api(method, path, body, options = {}) {
     if (res.status === 401) {
       console.error("[client] 401 on:", path, "skipAuthRedirect:", options.skipAuthRedirect);
       if (!options.skipAuthRedirect) {
-        clearAuthAndRedirectToWelcome(true);
+        clearAuthAndRedirectToLogin(true);
       }
       const err = new Error("Session expired");
       err.status = 401;
       throw err;
     }
     if (res.status === 403) {
-      redirectToRoleDashboardOrWelcome();
+      redirectToRoleDashboardOrLogin();
       const err = new Error("Redirecting");
       err.status = 403;
       err.data = data;
