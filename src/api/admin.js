@@ -13,11 +13,9 @@ export async function createUser(data) {
 }
 
 /**
- * Get availability for an entity (user or mentor)
- * Supports unified schema: entity_id + entity_type
- * @param {string} entityId - UUID of user or mentor
- * @param {string} entityType - "USER" or "MENTOR" (default: "USER")
- * @param {string} weekStart - Optional week start date (YYYY-MM-DD)
+ * @deprecated Use availabilityApi.getWeekly({ entity_id, entity_type, weekStart }) instead
+ * This function is kept for backward compatibility only.
+ * Get availability for an entity (user or mentor) - admin context only
  */
 export async function getAvailabilityForEntity(entityId, entityType = "USER", weekStart) {
   const q = new URLSearchParams({
@@ -29,15 +27,16 @@ export async function getAvailabilityForEntity(entityId, entityType = "USER", we
 
 /**
  * Get availability for user (backward compatible wrapper)
- * @deprecated Use getAvailabilityForEntity instead
+ * @deprecated Use availabilityApi.getWeekly() instead
  */
 export async function getAvailabilityForUser(userId, weekStart) {
   return getAvailabilityForEntity(userId, "USER", weekStart);
 }
 
 /**
- * Get overlapping slots for an entity
- * Supports unified schema: entity_id + entity_type
+ * Get overlapping slots for an entity (admin context only)
+ * This remains in admin.js because overlap checking is typically admin functionality.
+ * 
  * @param {string} entityId - UUID of user or mentor
  * @param {string} entityType - "USER" or "MENTOR" (default: "USER")
  * @param {string} startTime - ISO 8601 UTC start time

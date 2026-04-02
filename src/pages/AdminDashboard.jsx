@@ -90,11 +90,12 @@ export default function AdminDashboard() {
     setLoadingUserAvail(true);
     setError("");
     try {
-      const data = await adminApi.getAvailabilityForEntity(
-        selectedUser.id,
-        "USER",
-        weekStart
-      );
+      // Use standardized availability API with admin entity override
+      const data = await availabilityApi.getWeekly({
+        weekStart,
+        entity_id: selectedUser.id,
+        entity_type: "USER",
+      });
       setUserAvailability(data);
     } catch (e) {
       setError(e.message || "Failed to load user availability");
@@ -112,11 +113,12 @@ export default function AdminDashboard() {
     setLoadingMentorAvail(true);
     setError("");
     try {
-      const data = await adminApi.getAvailabilityForEntity(
-        selectedMentor.id,
-        "MENTOR",
-        weekStart
-      );
+      // Use standardized availability API with admin entity override
+      const data = await availabilityApi.getWeekly({
+        weekStart,
+        entity_id: selectedMentor.id,
+        entity_type: "MENTOR",
+      });
       setMentorAvailability(data);
     } catch (e) {
       setError(e.message || "Failed to load mentor availability");
