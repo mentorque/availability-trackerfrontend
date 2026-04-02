@@ -202,7 +202,7 @@ export default function AdminDashboard() {
     return { hour: String(h), minute, amPm };
   }, []);
 
-  const meetingZone = displayTimezone === "IST" ? "Asia/Kolkata" : "Europe/Dublin";
+  const meetingZone = displayTimezone === "IST" ? "Asia/Kolkata" : "UTC";
 
   const scheduleStartDt = useMemo(() => {
     const hm = to24From12(scheduleStartHour, scheduleStartMinute, scheduleStartAmPm);
@@ -282,7 +282,7 @@ export default function AdminDashboard() {
       const date = scheduleStartDt.toFormat("dd-MM-yyyy");
       const startTime = scheduleStartDt.toFormat("HH:mm");
       const endTime = scheduleEndDt.toFormat("HH:mm");
-      const timezone = displayTimezone === "IST" ? "Asia/Kolkata" : "Europe/Dublin";
+      const timezone = displayTimezone === "IST" ? "Asia/Kolkata" : "UTC";
       await adminApi.scheduleMeeting({
         title: scheduleTitle.trim(),
         date,
@@ -322,8 +322,8 @@ export default function AdminDashboard() {
     const prevTz = prevDisplayTimezoneRef.current;
     if (prevTz === displayTimezone) return;
 
-    const prevZone = prevTz === "IST" ? "Asia/Kolkata" : "Europe/Dublin";
-    const newZone = displayTimezone === "IST" ? "Asia/Kolkata" : "Europe/Dublin";
+    const prevZone = prevTz === "IST" ? "Asia/Kolkata" : "UTC";
+    const newZone = displayTimezone === "IST" ? "Asia/Kolkata" : "UTC";
 
     const convertParts = (hour, minute, amPm) => {
       const hm = to24From12(hour, minute, amPm);
@@ -422,7 +422,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const selectedTimezone = displayTimezone === "IST" ? "Asia/Kolkata" : "Europe/Dublin";
+  const selectedTimezone = displayTimezone === "IST" ? "Asia/Kolkata" : "UTC";
 
   /** Display week: 7 days starting at weekStart (UTC), matching API grid. */
   const displayWeekInfo = useMemo(() => {
