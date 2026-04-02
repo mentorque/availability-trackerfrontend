@@ -5,6 +5,7 @@ import * as availabilityApi from "../api/availability";
 import * as callsApi from "../api/calls";
 import { recommendMentors } from "../utils/mentorRecommendation";
 import { formatDateLocal, formatTimeRange, isPastDateTime, formatTimeLocal } from "../utils/time";
+import Toast, { useToasts, ToastContainer } from "./Toast";
 
 const CALL_TYPES = [
   { value: "resume_revamp", label: "Resume Revamp" },
@@ -18,6 +19,9 @@ const TIMEZONE_OPTIONS = [
 ];
 
 export default function AdminSchedulingDashboard() {
+  // Toast notifications
+  const { toasts, addToast, removeToast } = useToasts();
+
   // Step state
   const [currentStep, setCurrentStep] = useState(1); // 1-8
 
@@ -35,6 +39,7 @@ export default function AdminSchedulingDashboard() {
   const [recommendedMentors, setRecommendedMentors] = useState([]);
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
   const [recommendationsError, setRecommendationsError] = useState("");
+  const [noMentorsFound, setNoMentorsFound] = useState(false);
 
   // Step 4: Mentor selection (implicit in step 5)
   const [selectedMentor, setSelectedMentor] = useState(null);
@@ -48,6 +53,7 @@ export default function AdminSchedulingDashboard() {
   const [overlappingSlots, setOverlappingSlots] = useState([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [slotsError, setSlotsError] = useState("");
+  const [noSlotsFound, setNoSlotsFound] = useState(false);
 
   // Step 6: Slot selection & booking
   const [selectedSlot, setSelectedSlot] = useState(null);
@@ -63,14 +69,24 @@ export default function AdminSchedulingDashboard() {
     (async () => {
       try {
         setLoadingUsers(true);
+        setUsersError("");
         const [usersList, mentorsList] = await Promise.all([
           adminApi.listUsers(),
           adminApi.listMentors(),
         ]);
-        setUsers(usersList);
-        setMentors(mentorsList);
+        
+        // Edge case: No users found
+        if (!usersList || usersList.length === 0) {
+          setUsersError("No users found in system. Please create users first.");
+          addToast("No users found", "warning", 5000);
+        } else {
+          setUsers(usersList);
+          setMentors(mentorsList || []);
+        }
       } catch (e) {
-        setUsersError(e.message || "Failed to load users");
+        const errorMsg = e.message || "Failed to load users";
+        setUsersError(errorMsg);
+        addToast(errorMsg, "error", 0); // Manual dismiss for errors
       } finally {
         setLoadingUsers(false);
       }
@@ -101,12 +117,26 @@ export default function AdminSchedulingDashboard() {
       try {
         setLoadingRecommendations(true);
         setRecommendationsError("");
+        setNoMentorsFound(false);
+
         const recommended = recommendMentors(
           selectedUser,
           mentors,
           callType,
           5 // Top 5 recommendations
         );
+        
+        // Edge case: No mentors found
+        if (!recommended || recommended.length === 0) {
+          setNoMentorsFound(true);
+          setRecommendationsError(
+            "No mentors available for this call type. Try a different call type or add more mentors."
+          );
+          addToast("No mentors found for this call type", "warning", 5000);
+          setRecommendedMentors([]);
+          return;
+        }
+
         // Convert to format for display
         const formatted = recommended.map((rec) => ({
           mentor: rec,
@@ -115,12 +145,14 @@ export default function AdminSchedulingDashboard() {
         }));
         setRecommendedMentors(formatted);
       } catch (e) {
-        setRecommendationsError(e.message || "Failed to get recommendations");
+        const errorMsg = e.message || "Failed to get recommendations";
+        setRecommendationsError(errorMsg);
+        addToast(errorMsg, "error", 0);
       } finally {
         setLoadingRecommendations(false);
       }
     },
-    [selectedUser, mentors]
+    [selectedUser, mentors, addToast]
   );
 
   // Handle mentor selection
@@ -189,14 +221,27 @@ export default function AdminSchedulingDashboard() {
           }
         }
 
+        // Edge case: No overlapping slots found
+        if (overlaps.length === 0) {
+          setNoSlotsFound(true);
+          setSlotsError(
+            `No overlapping availability found for ${selectedUser.name} and ${mentor.name}. Try selecting a different mentor or changing the week.`
+          );
+          addToast("No overlapping time slots found", "warning", 5000);
+        } else {
+          setNoSlotsFound(false);
+        }
+
         setOverlappingSlots(overlaps);
       } catch (e) {
-        setSlotsError(e.message || "Failed to fetch slots");
+        const errorMsg = e.message || "Failed to fetch slots";
+        setSlotsError(errorMsg);
+        addToast(errorMsg, "error", 0);
       } finally {
         setLoadingSlots(false);
       }
     },
-    [selectedUser, weekStart]
+    [selectedUser, weekStart, addToast]
   );
 
   // Handle slot selection and booking
@@ -208,7 +253,9 @@ export default function AdminSchedulingDashboard() {
   // Book the call
   const handleConfirmBooking = async () => {
     if (!selectedUser || !selectedMentor || !selectedSlot) {
-      setBookingError("Missing required information");
+      const errorMsg = "Missing required information";
+      setBookingError(errorMsg);
+      addToast(errorMsg, "error", 0);
       return;
     }
 
@@ -228,7 +275,9 @@ export default function AdminSchedulingDashboard() {
       };
 
       await callsApi.bookCall(callData);
-      setBookingSuccess("Call booked successfully!");
+      const successMsg = "Call booked successfully!";
+      setBookingSuccess(successMsg);
+      addToast(successMsg, "success", 3000);
       setCurrentStep(8);
 
       // Reset after 2 seconds
@@ -236,7 +285,9 @@ export default function AdminSchedulingDashboard() {
         handleReset();
       }, 2000);
     } catch (e) {
-      setBookingError(e.message || "Failed to book call");
+      const errorMsg = e.message || "Failed to book call";
+      setBookingError(errorMsg);
+      addToast(errorMsg, "error", 0);
     } finally {
       setBookingInProgress(false);
     }
@@ -267,6 +318,9 @@ export default function AdminSchedulingDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-4 py-8">
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} onDismiss={removeToast} />
+
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -374,13 +428,27 @@ function Step1UserSelection({ users, loadingUsers, usersError, onSelectUser }) {
 
       {usersError && (
         <div className="mb-6 p-4 bg-red-900/20 border border-red-700 rounded-lg">
-          <p className="text-red-300">{usersError}</p>
+          <p className="text-red-300 font-medium mb-2">⚠ No Users Available</p>
+          <p className="text-red-200 text-sm">{usersError}</p>
+          <div className="mt-4">
+            <p className="text-sm text-slate-300">
+              Please create users in the system before scheduling calls.
+            </p>
+          </div>
         </div>
       )}
 
       {loadingUsers ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full" />
+        <div className="text-center py-12">
+          <div className="flex items-center justify-center mb-4">
+            <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full" />
+          </div>
+          <p className="text-slate-400">Loading users...</p>
+        </div>
+      ) : users.length === 0 ? (
+        <div className="text-center py-12 bg-slate-900/30 border border-slate-700 rounded-lg">
+          <p className="text-slate-300 mb-2">📭 No users found</p>
+          <p className="text-sm text-slate-400">Create users first before scheduling calls.</p>
         </div>
       ) : (
         <>
@@ -394,7 +462,10 @@ function Step1UserSelection({ users, loadingUsers, usersError, onSelectUser }) {
 
           <div className="space-y-3 max-h-96 overflow-y-auto">
             {filteredUsers.length === 0 ? (
-              <p className="text-slate-400 text-center py-8">No users found</p>
+              <div className="text-center py-8 bg-slate-900/30 border border-slate-700 rounded-lg">
+                <p className="text-slate-400">🔍 No users match your search</p>
+                <p className="text-sm text-slate-500 mt-1">Try adjusting your search terms</p>
+              </div>
             ) : (
               filteredUsers.map((user) => (
                 <button
@@ -490,13 +561,25 @@ function Step3MentorRecommendations({
 
       {recommendationsError && (
         <div className="mb-6 p-4 bg-red-900/20 border border-red-700 rounded-lg">
-          <p className="text-red-300">{recommendationsError}</p>
+          <p className="text-red-300 font-medium mb-2">⚠ No Mentors Available</p>
+          <p className="text-red-200 text-sm">{recommendationsError}</p>
+          <div className="mt-4">
+            <p className="text-sm text-slate-300 mb-2">Try:</p>
+            <ul className="text-sm text-slate-300 list-disc list-inside space-y-1">
+              <li>Select a different call type</li>
+              <li>Wait for more mentors to join the platform</li>
+              <li>Contact support to add more mentors</li>
+            </ul>
+          </div>
         </div>
       )}
 
-      {recommendedMentors.length === 0 ? (
-        <p className="text-slate-400 text-center py-8">No recommended mentors found</p>
-      ) : (
+      {recommendedMentors.length === 0 && !recommendationsError ? (
+        <div className="text-center py-12 bg-slate-900/30 border border-slate-700 rounded-lg">
+          <p className="text-slate-400 mb-2">🔄 Loading mentors...</p>
+          <p className="text-sm text-slate-500">This should only take a moment</p>
+        </div>
+      ) : recommendedMentors.length > 0 ? (
         <div className="space-y-3 mb-6 max-h-96 overflow-y-auto">
           {recommendedMentors.map((rec, idx) => (
             <button
@@ -530,7 +613,7 @@ function Step3MentorRecommendations({
             </button>
           ))}
         </div>
-      )}
+      ) : null}
 
       <button
         onClick={onBack}
@@ -612,13 +695,25 @@ function Step5AvailableSlots({
 
       {slotsError && (
         <div className="mb-6 p-4 bg-red-900/20 border border-red-700 rounded-lg">
-          <p className="text-red-300">{slotsError}</p>
+          <p className="text-red-300 font-medium mb-2">⚠ No Overlapping Times</p>
+          <p className="text-red-200 text-sm">{slotsError}</p>
+          <div className="mt-4">
+            <p className="text-sm text-slate-300 mb-2">Try:</p>
+            <ul className="text-sm text-slate-300 list-disc list-inside space-y-1">
+              <li>Select a different mentor who has more availability</li>
+              <li>Check or update the user's availability settings</li>
+              <li>Try a different week</li>
+            </ul>
+          </div>
         </div>
       )}
 
-      {sortedDates.length === 0 ? (
-        <p className="text-slate-400 text-center py-8">No overlapping slots found</p>
-      ) : (
+      {sortedDates.length === 0 && !slotsError ? (
+        <div className="text-center py-12 bg-slate-900/30 border border-slate-700 rounded-lg">
+          <p className="text-slate-400 mb-2">🔄 Checking availability...</p>
+          <p className="text-sm text-slate-500">This should only take a moment</p>
+        </div>
+      ) : sortedDates.length > 0 ? (
         <div className="space-y-3 mb-6 max-h-96 overflow-y-auto">
           {sortedDates.map((date) => (
             <div key={date} className="border border-slate-700 rounded-lg overflow-hidden">
@@ -654,7 +749,7 @@ function Step5AvailableSlots({
             </div>
           ))}
         </div>
-      )}
+      ) : null}
 
       <button
         onClick={onBack}

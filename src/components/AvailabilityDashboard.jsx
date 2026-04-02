@@ -214,9 +214,20 @@ export default function AvailabilityDashboard({ role = "USER" }) {
 
       {/* Error Alert */}
       {error && (
-        <div className="rounded-lg bg-red-500/10 border border-red-500/30 p-4 text-red-400 text-sm font-medium">
-          <span className="mr-2">⚠️</span>
-          {error}
+        <div className="rounded-lg bg-red-900/20 border border-red-700 p-4 text-red-300 text-sm font-medium">
+          <div className="flex items-start gap-3">
+            <span className="text-lg flex-shrink-0">✕</span>
+            <div className="flex-1">
+              <p className="font-semibold mb-1">Error loading availability</p>
+              <p className="text-red-200">{error}</p>
+              <button
+                onClick={fetchWeekly}
+                className="mt-2 text-sm text-red-300 hover:text-red-100 underline transition"
+              >
+                Try again
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
