@@ -16,76 +16,79 @@ export default function Login() {
     setLoading(true);
     try {
       const user = await login(email, password);
-      if (user.role === "ADMIN") {
-        navigate("/admin", { replace: true });
-      } else if (user.role === "MENTOR") {
-        navigate("/mentor", { replace: true });
-      } else {
-        navigate("/user", { replace: true });
-      }
+      const path = user.role === "ADMIN" ? "/admin" : user.role === "MENTOR" ? "/mentor" : "/user";
+      navigate(path, { replace: true });
     } catch (err) {
-      setError(err.message || "Invalid email or password");
+      setError(err.message || "Credential verification failed");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen bg-navy-950 flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <div className="bg-navy-900 border border-navy-700 rounded-xl p-8 shadow-xl">
-          <div className="flex flex-col items-center mb-8">
-            <div className="w-12 h-12 rounded-xl bg-primary-600 flex items-center justify-center mb-3">
-              <span className="text-white text-xl font-bold">M</span>
-            </div>
-            <h1 className="text-2xl font-semibold text-white mb-1">Sign in</h1>
-            <p className="text-slate-400 text-sm">MentorQue Availability Platform</p>
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 selection:bg-white selection:text-black">
+      <div className="w-full max-w-[400px] space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+        
+        {/* Brand Identity */}
+        <div className="flex flex-col items-center text-center space-y-4">
+          <div className="w-16 h-16 rounded-3xl bg-white flex items-center justify-center shadow-[0_0_40px_rgba(255,255,255,0.15)] group transition-transform hover:scale-105 active:scale-95 duration-500">
+             <div className="w-8 h-1 bg-black rounded-full rotate-45 translate-y-1" />
+             <div className="w-8 h-1 bg-black rounded-full -rotate-45 -translate-y-1 -translate-x-4" />
           </div>
+          <div className="space-y-1">
+            <h1 className="text-2xl font-black tracking-tight text-white uppercase italic">MentorQue</h1>
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Institutional Access Only</p>
+          </div>
+        </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Authentication Wall */}
+        <div className="premium-card p-10 space-y-8 backdrop-blur-3xl bg-[#050505]/80">
+          <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="text-red-400 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+              <div className="text-[10px] font-black text-rose-500 uppercase tracking-widest bg-rose-500/5 border border-rose-500/10 rounded-lg p-3 text-center">
                 {error}
               </div>
             )}
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Email</label>
+            
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Identity Identifier</label>
               <input
-                id="login-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                autoComplete="email"
-                className="w-full px-4 py-2.5 rounded-lg bg-navy-800 border border-navy-600 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                placeholder="you@example.com"
+                className="w-full h-12 bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl px-4 text-sm text-white placeholder-slate-700 outline-none focus:border-white/20 transition-all duration-500"
+                placeholder="Email Address"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Password</label>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Security Key</label>
               <input
-                id="login-password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                autoComplete="current-password"
-                className="w-full px-4 py-2.5 rounded-lg bg-navy-800 border border-navy-600 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full h-12 bg-[#0A0A0A] border border-[#1A1A1A] rounded-xl px-4 text-sm text-white placeholder-slate-700 outline-none focus:border-white/20 transition-all duration-500"
                 placeholder="••••••••"
               />
             </div>
+
             <button
-              id="login-submit"
-              type="submit"
               disabled={loading}
-              className="w-full py-2.5 rounded-lg bg-primary-600 hover:bg-primary-500 text-white font-medium transition disabled:opacity-50"
+              className="group relative w-full h-12 bg-white text-black rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all duration-500 hover:shadow-[0_0_30px_rgba(255,255,255,0.2)] active:scale-[0.98] disabled:opacity-50 overflow-hidden"
             >
-              {loading ? "Signing in..." : "Sign in"}
+              <span className="relative z-10">{loading ? "Validating..." : "Execute Entry"}</span>
+              <div className="absolute inset-0 bg-slate-200 translate-y-full group-hover:translate-y-0 transition-transform duration-500" />
             </button>
           </form>
+        </div>
 
-          <p className="mt-6 text-center text-slate-500 text-xs">
-            Contact your admin if you need access.
+        {/* Footer Nodes */}
+        <div className="flex flex-col items-center gap-6 pt-4">
+          <div className="h-[1px] w-12 bg-[#1A1A1A]" />
+          <p className="text-[9px] font-black text-slate-700 uppercase tracking-[0.4em] hover:text-slate-500 transition cursor-default">
+            Proprietary Architecture • v2.4.0
           </p>
         </div>
       </div>

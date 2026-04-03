@@ -15,27 +15,26 @@ const CALL_TYPE_LABELS = {
   MOCK_INTERVIEW: "Mock Interview",
 };
 
-const STATUS_COLORS = {
-  SCHEDULED:   { bg: "bg-blue-900/30",   border: "border-blue-700",   text: "text-blue-300",   label: "Scheduled" },
-  COMPLETED:   { bg: "bg-green-900/30",  border: "border-green-700",  text: "text-green-300",  label: "Completed" },
-  CANCELLED:   { bg: "bg-red-900/30",    border: "border-red-700",    text: "text-red-300",    label: "Cancelled" },
-  IN_PROGRESS: { bg: "bg-purple-900/30", border: "border-purple-700", text: "text-purple-300", label: "In Progress" },
+const STATUS_CONFIGS = {
+  SCHEDULED:   { bg: "bg-blue-600/10",   border: "border-blue-600/20",   text: "text-blue-400",   label: "Scheduled" },
+  COMPLETED:   { bg: "bg-emerald-600/10",  border: "border-emerald-600/20",  text: "text-emerald-400",  label: "Completed" },
+  CANCELLED:   { bg: "bg-rose-600/10",    border: "border-rose-600/20",    text: "text-rose-400",    label: "Cancelled" },
+  IN_PROGRESS: { bg: "bg-amber-600/10", border: "border-amber-600/20", text: "text-amber-400", label: "In Progress" },
 };
+
+const DEFAULT_STATUS = { bg: "bg-slate-600/10", border: "border-slate-600/20", text: "text-slate-400", label: "Unknown" };
 
 export default function CallsDashboard() {
   const { user: authUser } = useAuth();
   const [calls, setCalls] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [displayTimezone, setDisplayTimezone] = useState("UTC");
-  const [statusFilter, setStatusFilter] = useState("all"); // all, scheduled, completed, cancelled, in_progress
+  const [displayTimezone, setDisplayTimezone] = useState("IST");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState("date-desc"); // date-asc, date-desc, name
+  const [sortBy, setSortBy] = useState("date-desc");
 
-  // Load calls on mount
-  useEffect(() => {
-    loadCalls();
-  }, []);
+  useEffect(() => { loadCalls(); }, []);
 
   const loadCalls = useCallback(async () => {
     try {
@@ -51,52 +50,6 @@ export default function CallsDashboard() {
     }
   }, []);
 
-  // Filter calls based on role (backend already filters, this is a safety net)
-  const roleFilteredCalls = useMemo(() => {
-    if (!authUser || !calls.length) return [];
-
-    if (authUser.role === "ADMIN") {
-      return calls;
-    } else if (authUser.role === "USER") {
-      return calls.filter((call) => call.userId === authUser.id);
-    } else if (authUser.role === "MENTOR") {
-      return calls.filter((call) => call.mentorId === authUser.id);
-    }
-    return [];
-  }, [calls, authUser]);
-
-  // Apply status filter
-  const statusFilteredCalls = useMemo(() => {
-    if (statusFilter === "all") return roleFilteredCalls;
-    return roleFilteredCalls.filter((call) => call.status === statusFilter.toUpperCase());
-  }, [roleFilteredCalls, statusFilter]);
-
-  // Apply search filter
-  const searchFilteredCalls = useMemo(() => {
-    if (!searchQuery.trim()) return statusFilteredCalls;
-    const query = searchQuery.toLowerCase();
-    return statusFilteredCalls.filter((call) => {
-      const userName = (call.user?.name || "").toLowerCase();
-      const mentorName = (call.mentor?.name || "").toLowerCase();
-      const callType = (call.callType || "").toLowerCase();
-      return userName.includes(query) || mentorName.includes(query) || callType.includes(query);
-    });
-  }, [statusFilteredCalls, searchQuery]);
-
-  // Apply sorting
-  const sortedCalls = useMemo(() => {
-    const sorted = [...searchFilteredCalls];
-    if (sortBy === "date-asc") {
-      sorted.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
-    } else if (sortBy === "date-desc") {
-      sorted.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
-    } else if (sortBy === "name") {
-      sorted.sort((a, b) => (a.user?.name || "").localeCompare(b.user?.name || ""));
-    }
-    return sorted;
-  }, [searchFilteredCalls, sortBy]);
-
-  // Derive display status
   const getCallStatus = (call) => {
     if (call.status === "CANCELLED") return "CANCELLED";
     if (call.status === "COMPLETED") return "COMPLETED";
@@ -108,186 +61,150 @@ export default function CallsDashboard() {
       if (now >= startTime && now < endTime) return "IN_PROGRESS";
       if (now >= endTime) return "COMPLETED";
     }
-    return call.status || "SCHEDULED";
+    return call.status?.toUpperCase() || "SCHEDULED";
   };
 
-  // Stats for header
-  const stats = useMemo(() => {
-    return {
-      total: roleFilteredCalls.length,
-      scheduled: roleFilteredCalls.filter((c) => getCallStatus(c) === "scheduled").length,
-      inProgress: roleFilteredCalls.filter((c) => getCallStatus(c) === "in_progress").length,
-      completed: roleFilteredCalls.filter((c) => getCallStatus(c) === "completed").length,
-      cancelled: roleFilteredCalls.filter((c) => c.status === "cancelled").length,
-    };
-  }, [roleFilteredCalls]);
+  const filteredCalls = useMemo(() => {
+    let result = [...calls];
+    
+    // Role filter
+    if (authUser?.role === "USER") {
+      result = result.filter(c => c.userId === authUser.id);
+    } else if (authUser?.role === "MENTOR") {
+      result = result.filter(c => c.mentorId === authUser.id);
+    }
+
+    // Status filter
+    if (statusFilter !== "all") {
+      result = result.filter(c => getCallStatus(c) === statusFilter.toUpperCase());
+    }
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(c => 
+        (c.user?.name || "").toLowerCase().includes(q) || 
+        (c.mentor?.name || "").toLowerCase().includes(q) || 
+        (c.title || "").toLowerCase().includes(q)
+      );
+    }
+
+    // Sort
+    if (sortBy === "date-asc") {
+      result.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+    } else if (sortBy === "date-desc") {
+      result.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+    }
+    
+    return result;
+  }, [calls, authUser, statusFilter, searchQuery, sortBy]);
+
+  const stats = useMemo(() => ({
+    total: filteredCalls.length,
+    scheduled: filteredCalls.filter(c => getCallStatus(c) === "SCHEDULED").length,
+    completed: filteredCalls.filter(c => getCallStatus(c) === "COMPLETED").length,
+  }), [filteredCalls]);
 
   return (
-    <div className="space-y-6 pb-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold text-white mb-2">
-          {authUser?.role === "ADMIN" ? "All Calls" : authUser?.role === "MENTOR" ? "My Mentoring Calls" : "My Calls"}
-        </h1>
-        <p className="text-slate-400">View and manage your scheduled calls</p>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <StatCard label="Total" value={stats.total} color="blue" />
-        <StatCard label="Scheduled" value={stats.scheduled} color="blue" />
-        <StatCard label="In Progress" value={stats.inProgress} color="purple" />
-        <StatCard label="Completed" value={stats.completed} color="green" />
-        <StatCard label="Cancelled" value={stats.cancelled} color="red" />
-      </div>
-
-      {/* Controls */}
-      <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl p-6 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Search */}
-          <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">Search</label>
-            <input
-              type="text"
-              placeholder="Search by name, mentor, or type..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-4 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          {/* Status Filter */}
-          <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">Status</label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-4 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Statuses</option>
-              <option value="scheduled">Scheduled</option>
-              <option value="in_progress">In Progress</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </div>
-
-          {/* Sort */}
-          <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">Sort By</label>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="w-full px-4 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="date-desc">Newest First</option>
-              <option value="date-asc">Oldest First</option>
-              <option value="name">User Name (A-Z)</option>
-            </select>
-          </div>
-
-          {/* Timezone */}
-          <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">Timezone</label>
-            <select
-              value={displayTimezone}
-              onChange={(e) => setDisplayTimezone(e.target.value)}
-              className="w-full px-4 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {TIMEZONE_OPTIONS.map((tz) => (
-                <option key={tz.value} value={tz.value}>
-                  {tz.label}
-                </option>
-              ))}
-            </select>
-          </div>
+    <div className="max-w-5xl mx-auto space-y-10 animate-in">
+      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight text-white capitalize">
+            {authUser?.role === "MENTOR" ? "Session Log" : "My Calls"}
+          </h1>
+          <p className="text-slate-500 text-sm font-medium">Historical registry of platform interactions</p>
         </div>
 
-        {/* Refresh Button */}
-        <div className="flex justify-between items-center">
-          <p className="text-sm text-slate-400">
-            Showing {sortedCalls.length} of {roleFilteredCalls.length} calls
-          </p>
-          <button
-            onClick={loadCalls}
-            disabled={loading}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg transition font-medium"
+        <div className="flex gap-4">
+          <div className="flex items-center gap-1.5 bg-[#0A0A0A] border border-[#1A1A1A] p-1 rounded-lg">
+             <button onClick={loadCalls} className="px-4 py-1.5 text-[10px] font-black uppercase text-slate-500 hover:text-white transition">Refresh Registry</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {[
+          { label: "Aggregate Sessions", value: stats.total, icon: "📊" },
+          { label: "Upcoming Syncs", value: stats.scheduled, icon: "🗓️" },
+          { label: "Successful Rounds", value: stats.completed, icon: "✅" }
+        ].map(s => (
+          <div key={s.label} className="premium-card p-6 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">{s.label}</p>
+              <p className="text-2xl font-bold text-white">{s.value}</p>
+            </div>
+            <div className="text-2xl opacity-50">{s.icon}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="premium-card overflow-hidden">
+        <div className="p-4 border-b border-[#1A1A1A] bg-[#0A0A0A] flex flex-wrap items-center gap-4">
+          <input 
+            type="text" 
+            placeholder="Search identifier..." 
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="bg-[#111111] border border-[#1A1A1A] rounded-lg px-4 py-2 text-xs text-white focus:border-white/20 outline-none flex-1 min-w-[200px]"
+          />
+          <select 
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            className="bg-[#111111] border border-[#1A1A1A] rounded-lg px-4 py-2 text-xs text-white outline-none"
           >
-            {loading ? "Loading..." : "Refresh"}
-          </button>
+            <option value="all">All States</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="completed">Completed</option>
+          </select>
         </div>
-      </div>
 
-      {/* Error Message */}
-      {error && (
-        <div className="p-4 bg-red-900/20 border border-red-700 rounded-lg">
-          <p className="text-red-300">{error}</p>
-        </div>
-      )}
-
-      {/* Loading State */}
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full" />
-        </div>
-      ) : sortedCalls.length === 0 ? (
-        <div className="text-center py-12 bg-slate-800/30 border border-slate-700 rounded-lg">
-          <p className="text-slate-400 mb-2">No calls found</p>
-          <p className="text-slate-500 text-sm">
-            {statusFilter !== "all" ? "Try adjusting your filters" : "No calls scheduled yet"}
-          </p>
-        </div>
-      ) : (
-        <>
-          {/* Desktop Table View */}
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full border-collapse">
+        <div className="overflow-x-auto">
+          {loading ? (
+            <div className="py-20 flex flex-col items-center gap-4">
+              <div className="w-6 h-6 border-2 border-white/10 border-t-white rounded-full animate-spin" />
+              <p className="text-[9px] font-black text-slate-600 tracking-widest uppercase">Fetching Records...</p>
+            </div>
+          ) : filteredCalls.length === 0 ? (
+            <div className="py-20 text-center opacity-40">
+              <p className="text-xs font-black uppercase tracking-widest">Registry Empty</p>
+            </div>
+          ) : (
+            <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-700">
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">User</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Mentor</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Date & Time</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Call Type</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Status</th>
+                <tr className="bg-[#0A0A0A] border-b border-[#1A1A1A]">
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Participant Details</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Chronology</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Classification</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Verification</th>
                 </tr>
               </thead>
               <tbody>
-                {sortedCalls.map((call, idx) => {
+                {filteredCalls.map(call => {
                   const status = getCallStatus(call);
-                  const statusConfig = STATUS_COLORS[status];
-
+                  const config = STATUS_CONFIGS[status] || DEFAULT_STATUS;
                   return (
-                    <tr key={call.id || idx} className="border-b border-slate-800 hover:bg-slate-900/50 transition">
-                      <td className="px-6 py-4 text-sm text-slate-200">
-                        <div>
-                          <p className="font-medium">{call.user?.name || "Unknown User"}</p>
-                          <p className="text-xs text-slate-500">{call.user?.email || ""}</p>
+                    <tr key={call.id} className="border-b border-[#1A1A1A] hover:bg-[#0A0A0A] transition-colors group">
+                      <td className="px-6 py-5">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-xl bg-[#111111] border border-[#1A1A1A] flex items-center justify-center font-black text-xs text-slate-500 group-hover:text-white transition">
+                            {authUser?.role === "MENTOR" ? call.user?.name?.[0] : call.mentor?.name?.[0]}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-white tracking-tight">{authUser?.role === "MENTOR" ? call.user?.name : call.mentor?.name}</p>
+                            <p className="text-[10px] text-slate-500 font-medium">{authUser?.role === "MENTOR" ? call.user?.email : call.mentor?.email}</p>
+                          </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-slate-200">
-                        <div>
-                          <p className="font-medium">{call.mentor?.name || "Unknown Mentor"}</p>
-                          <p className="text-xs text-slate-500">{call.mentor?.email || ""}</p>
-                        </div>
+                      <td className="px-6 py-5">
+                        <p className="text-xs font-bold text-slate-300">{DateTime.fromISO(call.startTime).toFormat("LLL dd")}</p>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">{DateTime.fromISO(call.startTime).toFormat("hh:mm a")} - {DateTime.fromISO(call.endTime).toFormat("hh:mm a")}</p>
                       </td>
-                      <td className="px-6 py-4 text-sm">
-                        <div>
-                          <p className="text-slate-200">
-                            {call.startTime ? formatDateLocal(call.startTime.split("T")[0], displayTimezone) : "—"}
-                          </p>
-                          <p className="text-xs text-slate-400">
-                            {call.startTime && call.endTime
-                              ? `${formatTimeLocal(call.startTime, displayTimezone)} – ${formatTimeLocal(call.endTime, displayTimezone)}`
-                              : "—"}
-                          </p>
-                        </div>
+                      <td className="px-6 py-5">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{call.callType?.replace(/_/g, ' ')}</span>
                       </td>
-                      <td className="px-6 py-4 text-sm text-slate-300">
-                        {CALL_TYPE_LABELS[call.callType] || call.callType || "—"}
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        <span className={`inline-block px-3 py-1 rounded-full border text-xs font-medium ${statusConfig.bg} ${statusConfig.border} ${statusConfig.text}`}>
-                          {statusConfig.label}
+                      <td className="px-6 py-5 text-right">
+                        <span className={`inline-flex px-2 py-1 rounded-md border text-[9px] font-black uppercase tracking-widest ${config.bg} ${config.border} ${config.text}`}>
+                          {config.label}
                         </span>
                       </td>
                     </tr>
@@ -295,68 +212,9 @@ export default function CallsDashboard() {
                 })}
               </tbody>
             </table>
-          </div>
-
-          {/* Mobile Card View */}
-          <div className="md:hidden space-y-3">
-            {sortedCalls.map((call, idx) => {
-              const status = getCallStatus(call);
-              const statusConfig = STATUS_COLORS[status];
-              return (
-                <div key={call.id || idx} className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1">
-                      <p className="font-semibold text-white">{call.user?.name || "Unknown User"}</p>
-                      <p className="text-xs text-slate-400">{call.user?.email || ""}</p>
-                    </div>
-                    <span className={`shrink-0 inline-block px-2 py-1 rounded-full border text-xs font-medium ${statusConfig.bg} ${statusConfig.border} ${statusConfig.text}`}>
-                      {statusConfig.label}
-                    </span>
-                  </div>
-                  <div className="border-t border-slate-700 pt-3">
-                    <p className="text-xs text-slate-400 mb-1">Mentor</p>
-                    <p className="font-medium text-slate-200">{call.mentor?.name || "Unknown Mentor"}</p>
-                    <p className="text-xs text-slate-500">{call.mentor?.email || ""}</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <p className="text-xs text-slate-400 mb-1">Date</p>
-                      <p className="text-slate-200">{call.startTime ? formatDateLocal(call.startTime.split("T")[0], displayTimezone) : "—"}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-400 mb-1">Time</p>
-                      <p className="text-slate-200">
-                        {call.startTime && call.endTime ? `${formatTimeLocal(call.startTime, displayTimezone)} – ${formatTimeLocal(call.endTime, displayTimezone)}` : "—"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="border-t border-slate-700 pt-3">
-                    <p className="text-xs text-slate-400 mb-1">Call Type</p>
-                    <p className="text-slate-200">{CALL_TYPE_LABELS[call.callType] || call.callType || "—"}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// Stat Card Component
-function StatCard({ label, value, color }) {
-  const colorClasses = {
-    blue: "bg-blue-900/20 border-blue-700 text-blue-300",
-    purple: "bg-purple-900/20 border-purple-700 text-purple-300",
-    green: "bg-green-900/20 border-green-700 text-green-300",
-    red: "bg-red-900/20 border-red-700 text-red-300",
-  };
-
-  return (
-    <div className={`border rounded-lg p-4 ${colorClasses[color]}`}>
-      <p className="text-xs font-medium opacity-75">{label}</p>
-      <p className="text-2xl font-bold mt-1">{value}</p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

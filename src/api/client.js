@@ -58,3 +58,25 @@ export const get  = (path) => api("GET",    path);
 export const post = (path, body) => api("POST",   path, body);
 export const put  = (path, body) => api("PUT",    path, body);
 export const del  = (path) => api("DELETE", path);
+
+export const usersApi = {
+  getAll: () => get("/api/admin/users"),
+  create: (data) => post("/api/admin/users", data),
+  update: (id, data) => put(`/api/admin/users/${id}`, data),
+};
+
+export const mentorsApi = {
+  getAll: () => get("/api/admin/mentors"),
+  create: (data) => post("/api/admin/mentors", data),
+  update: (id, data) => put(`/api/admin/mentors/${id}`, data),
+};
+
+export const callsApi = {
+  getCalls: () => get("/api/calls"),
+  bookCall: (data) => post("/api/calls", data),
+};
+
+export const adminSchedulingApi = {
+  getOverlaps: (data) => post("/api/admin/schedule/overlaps", data),
+  bookScheduledCall: (data) => post("/api/admin/schedule/book", data),
+};

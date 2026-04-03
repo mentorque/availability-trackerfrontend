@@ -394,12 +394,7 @@ export function recommendMentors(user, mentors, callType = 'GENERAL_MENTORING', 
       const reasoning = buildReasoningExplanation(scoreData, mentor);
 
       return {
-        id: mentor.id,
-        name: mentor.name,
-        tags: mentor.tags,
-        domain: mentor.domain,
-        companyType: mentor.companyType || mentor.company_type,
-        communicationScore: mentor.communicationScore || mentor.communication_score,
+        mentor,
         score: scoreData.totalScore,
         reasoning,
         scoreBreakdown: {

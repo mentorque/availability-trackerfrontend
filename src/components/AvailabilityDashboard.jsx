@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { DateTime } from "luxon";
 import { useAuth } from "../context/AuthContext";
 import * as availabilityApi from "../api/availability";
 import WeeklyCalendarGrid from "./WeeklyCalendarGrid";
@@ -29,10 +30,10 @@ const ROLE_HEADINGS = {
 
 export default function AvailabilityDashboard({ role = "USER" }) {
   const { user } = useAuth();
-  const [displayTimezone, setDisplayTimezone] = useState(user?.timezone || "UTC");
-  const [weekOffset, setWeekOffset] = useState(0); // 0 = today..today+6, 1 = +7..+13, etc.
+  const [displayTimezone, setDisplayTimezone] = useState(user?.timezone || "IST");
+  const [weekOffset, setWeekOffset] = useState(0); 
   const [data, setData] = useState({ dates: [], availability: {} });
-  const [loading, setLoading] = useState(!user); // only show loading if no user yet
+  const [loading, setLoading] = useState(!user); 
   const [saving, setSaving] = useState(false);
   const [toggles, setToggles] = useState({});
   const [error, setError] = useState("");
@@ -49,13 +50,12 @@ export default function AvailabilityDashboard({ role = "USER" }) {
       const entity = { entity_id: user.id, entity_type: role === "MENTOR" ? "MENTOR" : "USER" };
       const res = await availabilityApi.getWeekly({ weekStart: weekStartStr, ...entity });
       setData(res);
-      // DO NOT call setToggles({}) here
     } catch (e) {
       setError(e.message || "Failed to load availability");
     } finally {
       setLoading(false);
     }
-  }, [weekOffset, user?.id]);
+  }, [weekOffset, user?.id, role]);
 
   useEffect(() => {
     setToggles({});
@@ -63,7 +63,7 @@ export default function AvailabilityDashboard({ role = "USER" }) {
 
   useEffect(() => {
     if (user) fetchWeekly();
-  }, [fetchWeekly]);
+  }, [fetchWeekly, user]);
 
   const isSlotEnabled = (dateStr, hour) => {
     const key = `${dateStr}-${hour}`;
@@ -99,12 +99,7 @@ export default function AvailabilityDashboard({ role = "USER" }) {
         if (toggles[key] === undefined) return;
         const enabled = toggles[key];
         const { startTime, endTime } = slotToUTC(dateStr, hour);
-        slots.push({
-          date: dateStr,
-          startTime,
-          endTime,
-          enabled,
-        });
+        slots.push({ date: dateStr, startTime, endTime, enabled });
       });
     });
     if (slots.length === 0) {
@@ -112,24 +107,8 @@ export default function AvailabilityDashboard({ role = "USER" }) {
       return;
     }
     try {
-      // Deduplicate slots with same start/end for this entity before sending
-      const dedupeSlots = (input) => {
-        const m = new Map();
-        for (const s of input) {
-          const k = `${s.startTime}|${s.endTime}`;
-          if (!m.has(k)) m.set(k, { ...s });
-          else {
-            const ex = m.get(k);
-            ex.enabled = ex.enabled || s.enabled; // if any says enabled, keep enabled
-            m.set(k, ex);
-          }
-        }
-        return Array.from(m.values());
-      };
-
-      const payload = dedupeSlots(slots);
       const entity = { entity_id: user.id, entity_type: role === "MENTOR" ? "MENTOR" : "USER" };
-      await availabilityApi.saveBatch(payload, entity);
+      await availabilityApi.saveBatch(slots, entity);
       await fetchWeekly();
       setToggles({});
     } catch (e) {
@@ -140,167 +119,66 @@ export default function AvailabilityDashboard({ role = "USER" }) {
   };
 
   const hasChanges = Object.keys(toggles).length > 0;
-
-  // Visible 7-day window: always today + weekOffset * 7, forward only
-  const buildGridDates = () => {
+  const gridDates = useMemo(() => {
     const today = new Date();
     const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
     start.setUTCDate(start.getUTCDate() + weekOffset * 7);
-    const days = [];
-    for (let i = 0; i < 7; i += 1) {
+    return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(start);
       d.setUTCDate(start.getUTCDate() + i);
-      days.push(d.toISOString().slice(0, 10));
-    }
-    return days;
-  };
+      return d.toISOString().slice(0, 10);
+    });
+  }, [weekOffset]);
 
-  const gridDates = buildGridDates();
   const gridStart = gridDates[0];
-
-  const prevWeek = () => {
-    if (weekOffset === 0) return; // do not navigate into the past
-    setWeekOffset((prev) => Math.max(0, prev - 1));
-  };
-  const nextWeek = () => {
-    setWeekOffset((prev) => prev + 1);
-  };
-
-  const weekMin = gridDates[0] || "";
-  const weekMax = gridDates[6] || "";
-
-  const isSelectorSlotDisabled =
-    selectorDate !== "" && isSlotDisabled(selectorDate, selectorHour);
-
-  const confirmSelectorSlot = async () => {
-    if (!selectorDate || isSelectorSlotDisabled) return;
-
-    const { startTime, endTime } = slotToUTC(selectorDate, selectorHour);
-
-    setSaving(true);
-    setError("");
-    try {
-      const entity = { entity_id: user.id, entity_type: role === "MENTOR" ? "MENTOR" : "USER" };
-      // dedupe single slot batch is trivial but keep shape consistent
-      await availabilityApi.saveBatch([
-        { date: selectorDate, startTime, endTime, enabled: true },
-      ], entity);
-      await fetchWeekly();
-    } catch (e) {
-      setError(e.message || "Failed to save");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const cancelChanges = () => {
-    setToggles({});
-  };
-
-  const formatTimeOptionLabel = (utcHourIndex) => {
-    const startISO = new Date(Date.UTC(2000, 0, 1, utcHourIndex, 0)).toISOString();
-    const endISO = new Date(Date.UTC(2000, 0, 1, utcHourIndex + 1, 0)).toISOString();
-    const start = formatTimeLocal(startISO, displayTimezone);
-    const end = formatTimeLocal(endISO, displayTimezone);
-    return formatTimeRange(`${start} – ${end}`);
-  };
-
   const heading = ROLE_HEADINGS[role] ?? ROLE_HEADINGS.USER;
 
   return (
-    <div className="space-y-6 pb-8">
-      {/* Header */}
-      <header className="space-y-2">
-        <h1 className="text-3xl font-bold text-white">{heading}</h1>
-        <p className="text-slate-400">Set your availability for the upcoming week.</p>
-      </header>
-
-      {/* Error Alert */}
-      {error && (
-        <div className="rounded-lg bg-red-900/20 border border-red-700 p-4 text-red-300 text-sm font-medium">
-          <div className="flex items-start gap-3">
-            <span className="text-lg flex-shrink-0">✕</span>
-            <div className="flex-1">
-              <p className="font-semibold mb-1">Error loading availability</p>
-              <p className="text-red-200">{error}</p>
-              <button
-                onClick={fetchWeekly}
-                className="mt-2 text-sm text-red-300 hover:text-red-100 underline transition"
-              >
-                Try again
-              </button>
-            </div>
+    <div className="max-w-5xl mx-auto space-y-10 animate-in">
+      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 pb-2">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight text-white capitalize">{heading}</h1>
+          <p className="text-slate-500 text-sm font-medium">Configure your availability for the platform</p>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <select
+            value={displayTimezone}
+            onChange={(e) => setDisplayTimezone(e.target.value)}
+            className="bg-[#0A0A0A] border border-[#1A1A1A] rounded-lg px-3 py-1.5 text-[10px] font-black uppercase text-white outline-none focus:ring-1 focus:ring-white/20 transition"
+          >
+            {TIMEZONE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          
+          <div className="flex items-center gap-1.5 bg-[#0A0A0A] border border-[#1A1A1A] p-1 rounded-lg">
+            <button
+              onClick={() => setWeekOffset(prev => Math.max(0, prev - 1))}
+              disabled={weekOffset === 0}
+              className="p-1 px-2 text-xs font-bold text-slate-500 hover:text-white disabled:opacity-30 transition"
+            >
+              ←
+            </button>
+            <span className="px-2 text-[10px] font-black uppercase text-white tracking-widest">{DateTime.fromISO(gridStart).toFormat("MMM dd")}</span>
+            <button
+              onClick={() => setWeekOffset(prev => prev + 1)}
+              className="p-1 px-2 text-xs font-bold text-slate-500 hover:text-white transition"
+            >
+              →
+            </button>
           </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-xl text-rose-400 text-xs font-bold flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError("")}>✕</button>
         </div>
       )}
 
-      {/* Controls Section */}
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded-xl bg-slate-900/50 border border-slate-800 p-6 space-y-4 md:space-y-0">
-        {/* Timezone Selector */}
-        <div className="space-y-2">
-          <label htmlFor="timezone-select" className="block text-sm font-semibold text-slate-300">
-            🌍 Timezone
-          </label>
-          <select
-            id="timezone-select"
-            value={displayTimezone}
-            onChange={(e) => setDisplayTimezone(e.target.value)}
-            className="w-full rounded-lg bg-slate-950 border border-slate-700 text-white font-medium px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-smooth"
-          >
-            {TIMEZONE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Week Navigation */}
-        <div className="space-y-2">
-          <label className="block text-sm font-semibold text-slate-300">
-            📅 Week
-          </label>
-          <div className="flex items-center gap-2 bg-slate-950 rounded-lg border border-slate-700 p-2">
-            <button
-              type="button"
-              onClick={prevWeek}
-              disabled={weekOffset === 0}
-              title="Previous week"
-              className="px-3 py-2 rounded-lg transition-smooth disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 disabled:text-slate-500 hover:bg-slate-800"
-              aria-label="Previous week"
-            >
-              ← Prev
-            </button>
-
-            <div className="flex-1 text-center text-sm font-medium text-slate-300">
-              {formatDateLocal(gridStart, displayTimezone)}
-            </div>
-
-            <button
-              type="button"
-              onClick={nextWeek}
-              title="Next week"
-              className="px-3 py-2 rounded-lg transition-smooth text-slate-300 hover:bg-slate-800"
-              aria-label="Next week"
-            >
-              Next →
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* Calendar Grid Section */}
-      <section className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold text-white">📅 Your Availability</h2>
-            <p className="text-slate-400 text-sm mt-1">Click slots to mark availability</p>
-          </div>
-          {hasChanges && (
-            <Badge variant="warning" size="sm" text={`${Object.keys(toggles).length} pending changes`} />
-          )}
-        </div>
-
+      <div className="premium-card p-0 overflow-hidden">
         <WeeklyCalendarGrid
           gridDates={gridDates}
           isSlotEnabled={isSlotEnabled}
@@ -310,38 +188,30 @@ export default function AvailabilityDashboard({ role = "USER" }) {
           loading={loading}
           gridStart={gridStart}
         />
-      </section>
+      </div>
 
-      {/* Action Buttons */}
-      {hasChanges && (
-        <section className="flex gap-3 sticky bottom-0 bg-slate-950/95 border-t border-slate-800 p-4 -m-6 mt-6 pt-4 backdrop-blur-sm rounded-b-2xl">
-          <Button
-            variant="ghost"
-            size="md"
-            onClick={cancelChanges}
-            disabled={saving}
-            className="flex-1"
-          >
-            ✕ Discard
-          </Button>
-          <Button
-            variant="primary"
-            size="md"
-            loading={saving}
-            loadingText="Saving..."
-            onClick={saveBatch}
-            className="flex-1"
-          >
-            ✓ Save Changes
-          </Button>
-        </section>
-      )}
-
-      {!hasChanges && !loading && (
-        <div className="text-center py-8">
-          <Badge variant="success" size="md" text="✓ All changes saved" />
+      <div className="flex justify-between items-center bg-[#0A0A0A] border border-[#1A1A1A] p-6 rounded-[24px]">
+        <div>
+          <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1">Status Report</p>
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${hasChanges ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
+            <p className="text-xs font-bold text-white uppercase">{hasChanges ? `${Object.keys(toggles).length} Unsaved Modifications` : 'Registry Synchronized'}</p>
+          </div>
         </div>
-      )}
+        
+        {hasChanges && (
+          <div className="flex gap-3">
+            <button onClick={() => setToggles({})} className="px-6 py-2.5 text-[10px] font-black uppercase text-slate-500 hover:text-white transition">Discard</button>
+            <button 
+              onClick={saveBatch} 
+              disabled={saving}
+              className="btn-primary px-8 py-2.5 text-[10px] font-black uppercase tracking-widest"
+            >
+              {saving ? 'Saving...' : 'Deploy Changes'}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
