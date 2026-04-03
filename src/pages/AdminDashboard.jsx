@@ -1,1475 +1,349 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { DateTime } from "luxon";
-import { useAuth } from "../context/AuthContext";
-import * as adminApi from "../api/admin";
-import * as availabilityApi from "../api/availability";
-import * as callsApi from "../api/calls";
-import {
-  formatDateLocal,
-  formatSlotLabel,
-  formatTimeRange,
-  isPastDateTime,
-} from "../utils/time";
+import { usersApi, mentorsApi, callsApi } from "../api/client";
+import EditProfileModal from "../components/EditProfileModal";
 import AddUserModal from "../components/AddUserModal";
 import AddMentorModal from "../components/AddMentorModal";
-import EditProfileModal from "../components/EditProfileModal";
-
-const TIMEZONE_OPTIONS = [
-  { value: "UTC", label: "GMT (GMT+0)" },
-  { value: "IST", label: "IST (GMT+5:30)" },
-];
-
-const SCHEDULE_HOUR_OPTIONS = Array.from({ length: 12 }, (_, i) => String(i + 1));
-const SCHEDULE_MINUTE_OPTIONS = ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"];
-const SCHEDULE_AMPM_OPTIONS = ["AM", "PM"];
-
-const scheduleTimeSelectClass =
-  "min-w-0 flex-1 box-border rounded-lg bg-slate-950 border border-slate-800 text-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none";
+import { recommendMentors } from "../utils/mentorRecommendation";
 
 export default function AdminDashboard() {
-  const { user: authUser } = useAuth();
-  const [adminEmail, setAdminEmail] = useState("");
+  const [activeTab, setActiveTab] = useState("schedule");
   const [users, setUsers] = useState([]);
   const [mentors, setMentors] = useState([]);
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [selectedMentor, setSelectedMentor] = useState(null);
-  const [displayTimezone, setDisplayTimezone] = useState("UTC");
-  const [weekStart, setWeekStart] = useState(() => {
-    const today = new Date();
-    const base = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-    return base.toISOString().slice(0, 10);
-  });
-  const emptyAvailability = useMemo(() => ({ dates: [], availability: {} }), []);
-  const [userAvailability, setUserAvailability] = useState(() => ({ dates: [], availability: {} }));
-  const [mentorAvailability, setMentorAvailability] = useState(() => ({ dates: [], availability: {} }));
-  const [loadingUserAvail, setLoadingUserAvail] = useState(false);
-  const [loadingMentorAvail, setLoadingMentorAvail] = useState(false);
   const [meetings, setMeetings] = useState([]);
-  const [scheduleTitle, setScheduleTitle] = useState("");
-  const [scheduleDate, setScheduleDate] = useState("");
-  const [scheduleStartHour, setScheduleStartHour] = useState("");
-  const [scheduleStartMinute, setScheduleStartMinute] = useState("");
-  const [scheduleStartAmPm, setScheduleStartAmPm] = useState("");
-  const [scheduleEndHour, setScheduleEndHour] = useState("");
-  const [scheduleEndMinute, setScheduleEndMinute] = useState("");
-  const [scheduleEndAmPm, setScheduleEndAmPm] = useState("");
-  const [scheduleInlineError, setScheduleInlineError] = useState("");
-  const [userEmail, setUserEmail] = useState("");
-  const [mentorEmail, setMentorEmail] = useState("");
-  const [additionalEmails, setAdditionalEmails] = useState([""]);
-  const [overlapSlots, setOverlapSlots] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [showAddUserModal, setShowAddUserModal] = useState(false);
-  const [showAddMentorModal, setShowAddMentorModal] = useState(false);
-  const [showEditUserModal, setShowEditUserModal] = useState(false);
-  const [showEditMentorModal, setShowEditMentorModal] = useState(false);
-  const [meetingToDelete, setMeetingToDelete] = useState(null);
-  const [deletingMeetingId, setDeletingMeetingId] = useState(null);
-  const [activeMeeting, setActiveMeeting] = useState(null);
-  const [copiedMeetingDetails, setCopiedMeetingDetails] = useState(false);
-  const meetingsRef = useRef([]);
-  const [selectedCommonSlot, setSelectedCommonSlot] = useState(null);
-  const prevDisplayTimezoneRef = useRef(displayTimezone);
+  const [error, setError] = useState(null);
+  
+  const [bookingStep, setBookingStep] = useState(1);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedCallType, setSelectedCallType] = useState("");
+  const [recommendations, setRecommendations] = useState([]);
+  const [selectedMentor, setSelectedMentor] = useState(null);
+  const [displayTimezone, setDisplayTimezone] = useState("IST");
+  const [userSearch, setUserSearch] = useState("");
+  
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [scheduleStartHour, setScheduleStartHour] = useState("09");
+  const [scheduleStartMinute, setScheduleStartMinute] = useState("00");
+  const [scheduleStartAmPm, setScheduleStartAmPm] = useState("AM");
+  const [scheduleTitle, setScheduleTitle] = useState("");
+  const [callNotes, setCallNotes] = useState("");
 
-  const loadUsers = useCallback(async () => {
+  useEffect(() => { loadData(); }, []);
+
+  const loadData = async () => {
     try {
-      const [u, m] = await Promise.all([adminApi.listUsers(), adminApi.listMentors()]);
-      setUsers(u);
-      setMentors(m);
-    } catch (e) {
-      setError(e.message || "Failed to load users");
-    }
-  }, []);
-
-  const availabilityTarget = selectedUser || selectedMentor;
-
-  const loadUserAvailability = useCallback(async () => {
-    if (!selectedUser) {
-      setUserAvailability(emptyAvailability);
-      return;
-    }
-    setLoadingUserAvail(true);
-    setError("");
-    try {
-      // Use standardized availability API with admin entity override
-      const data = await availabilityApi.getWeekly({
-        weekStart,
-        entity_id: selectedUser.id,
-        entity_type: "USER",
-      });
-      setUserAvailability(data);
-    } catch (e) {
-      setError(e.message || "Failed to load user availability");
-      setUserAvailability(emptyAvailability);
-    } finally {
-      setLoadingUserAvail(false);
-    }
-  }, [selectedUser, weekStart, emptyAvailability]);
-
-  const loadMentorAvailability = useCallback(async () => {
-    if (!selectedMentor) {
-      setMentorAvailability(emptyAvailability);
-      return;
-    }
-    setLoadingMentorAvail(true);
-    setError("");
-    try {
-      // Use standardized availability API with admin entity override
-      const data = await availabilityApi.getWeekly({
-        weekStart,
-        entity_id: selectedMentor.id,
-        entity_type: "MENTOR",
-      });
-      setMentorAvailability(data);
-    } catch (e) {
-      setError(e.message || "Failed to load mentor availability");
-      setMentorAvailability(emptyAvailability);
-    } finally {
-      setLoadingMentorAvail(false);
-    }
-  }, [selectedMentor, weekStart, emptyAvailability]);
-
-  const loadCalls = useCallback(async () => {
-    try {
-      const list = await callsApi.listCalls();
-      setMeetings(list);
-    } catch {
-      setMeetings([]);
-    }
-  }, []);
-
-  useEffect(() => {
-    meetingsRef.current = meetings;
-  }, [meetings]);
-
-  // Initialize admin email from localStorage or auth user on mount
-  useEffect(() => {
-    const storedEmail = localStorage.getItem("userEmail");
-    if (storedEmail) {
-      setAdminEmail(storedEmail);
-    } else if (authUser?.email) {
-      setAdminEmail(authUser.email);
-    }
-  }, [authUser?.email]);
-
-  useEffect(() => {
-    loadUsers();
-    loadCalls();
-  }, [loadUsers, loadCalls]);
-
-  useEffect(() => {
-    if (!selectedUser) {
-      setUserAvailability(emptyAvailability);
-    }
-  }, [selectedUser, emptyAvailability]);
-  useEffect(() => {
-    if (!selectedMentor) {
-      setMentorAvailability(emptyAvailability);
-    }
-  }, [selectedMentor, emptyAvailability]);
-
-  useEffect(() => {
-    loadUserAvailability();
-  }, [loadUserAvailability]);
-  useEffect(() => {
-    loadMentorAvailability();
-  }, [loadMentorAvailability]);
-
-  useEffect(() => {
-    if (selectedUser) setUserEmail(selectedUser.email);
-  }, [selectedUser]);
-  useEffect(() => {
-    if (selectedMentor) setMentorEmail(selectedMentor.email);
-  }, [selectedMentor]);
-
-  const to24From12 = useCallback((hourStr, minuteStr, amPm) => {
-    if (!hourStr || !minuteStr || !amPm) return null;
-    let h = parseInt(hourStr, 10);
-    if (Number.isNaN(h)) return null;
-    const ap = amPm.toUpperCase();
-    if (ap === "AM") {
-      if (h === 12) h = 0;
-    } else if (ap === "PM") {
-      if (h !== 12) h += 12;
-    } else return null;
-    return `${String(h).padStart(2, "0")}:${minuteStr}`;
-  }, []);
-
-  const hm24To12Parts = useCallback((hm24) => {
-    if (!hm24 || !/^\d{1,2}:\d{2}$/.test(hm24)) return { hour: "", minute: "", amPm: "" };
-    const [hs, ms] = hm24.split(":");
-    let h = parseInt(hs, 10);
-    const minute = ms.padStart(2, "0");
-    if (Number.isNaN(h)) return { hour: "", minute: "", amPm: "" };
-    let amPm = "AM";
-    if (h === 0) {
-      h = 12;
-    } else if (h === 12) {
-      amPm = "PM";
-    } else if (h > 12) {
-      h -= 12;
-      amPm = "PM";
-    }
-    return { hour: String(h), minute, amPm };
-  }, []);
-
-  const meetingZone = displayTimezone === "IST" ? "Asia/Kolkata" : "UTC";
-
-  const scheduleStartDt = useMemo(() => {
-    const hm = to24From12(scheduleStartHour, scheduleStartMinute, scheduleStartAmPm);
-    if (!scheduleDate || !hm) return null;
-    const dt = DateTime.fromFormat(`${scheduleDate} ${hm}`, "yyyy-MM-dd HH:mm", { zone: meetingZone });
-    return dt.isValid ? dt : null;
-  }, [scheduleDate, scheduleStartHour, scheduleStartMinute, scheduleStartAmPm, meetingZone, to24From12]);
-
-  const scheduleEndDt = useMemo(() => {
-    const hm = to24From12(scheduleEndHour, scheduleEndMinute, scheduleEndAmPm);
-    if (!scheduleDate || !hm) return null;
-    const dt = DateTime.fromFormat(`${scheduleDate} ${hm}`, "yyyy-MM-dd HH:mm", { zone: meetingZone });
-    return dt.isValid ? dt : null;
-  }, [scheduleDate, scheduleEndHour, scheduleEndMinute, scheduleEndAmPm, meetingZone, to24From12]);
-
-  const scheduleStartIso = scheduleStartDt?.toISO() ?? "";
-  const scheduleEndIso = scheduleEndDt?.toISO() ?? "";
-
-  const checkOverlap = useCallback(async () => {
-    if (!availabilityTarget || !scheduleStartIso || !scheduleEndIso) return;
-    try {
-      const entityType = selectedUser ? "USER" : selectedMentor ? "MENTOR" : "USER";
-      const slots = await adminApi.getOverlappingSlotsForEntity(
-        availabilityTarget.id,
-        entityType,
-        scheduleStartIso,
-        scheduleEndIso
-      );
-      setOverlapSlots(slots);
-    } catch {
-      setOverlapSlots([]);
-    }
-  }, [availabilityTarget, scheduleStartIso, scheduleEndIso, selectedUser, selectedMentor]);
-
-  useEffect(() => {
-    if (scheduleStartIso && scheduleEndIso && availabilityTarget?.id) checkOverlap();
-    else setOverlapSlots([]);
-  }, [scheduleStartIso, scheduleEndIso, availabilityTarget?.id, checkOverlap]);
-
-  const getParticipantEmails = () => {
-    const list = [userEmail.trim(), mentorEmail.trim(), ...additionalEmails.map((e) => e.trim())].filter(Boolean);
-    return list;
+      const [u, m, c] = await Promise.all([usersApi.getAll(), mentorsApi.getAll(), callsApi.getCalls()]);
+      setUsers(u); setMentors(m); setMeetings(c);
+    } catch (err) { setError("Failed to load dashboard data"); }
   };
+
+  const handleSelectUser = (u) => { setSelectedUser(u); setBookingStep(2); };
+  
+  const handleSelectCallType = (type) => {
+    setSelectedCallType(type);
+    const recs = recommendMentors(selectedUser, mentors, type);
+    setRecommendations(recs);
+    setBookingStep(3);
+  };
+
+  const handleSelectMentor = (m) => { setSelectedMentor(m); setBookingStep(4); };
 
   const handleScheduleMeeting = async (e) => {
     e.preventDefault();
-    setScheduleInlineError("");
-    setSuccess("");
-    if (!scheduleTitle.trim()) {
-      setScheduleInlineError("Call name is required.");
-      return;
-    }
-    if (!scheduleDate) {
-      setScheduleInlineError("Please select a date.");
-      return;
-    }
-    if (!scheduleStartHour || !scheduleStartMinute || !scheduleStartAmPm) {
-      setScheduleInlineError("Please select a complete start time");
-      return;
-    }
-    if (!scheduleEndHour || !scheduleEndMinute || !scheduleEndAmPm) {
-      setScheduleInlineError("Please select a complete end time");
-      return;
-    }
-    if (!scheduleStartDt || !scheduleEndDt) {
-      setScheduleInlineError("Invalid date or time.");
-      return;
-    }
-    if (scheduleEndDt.toMillis() <= scheduleStartDt.toMillis()) {
-      setScheduleInlineError("End time must be after start time");
-      return;
-    }
-    if (isPastDateTime(scheduleStartIso)) {
-      setScheduleInlineError("Cannot schedule in the past.");
-      return;
-    }
     setLoading(true);
     try {
-      const date = scheduleStartDt.toFormat("dd-MM-yyyy");
-      const startTime = scheduleStartDt.toFormat("HH:mm");
-      const endTime = scheduleEndDt.toFormat("HH:mm");
-      const timezone = displayTimezone === "IST" ? "Asia/Kolkata" : "UTC";
-      await adminApi.scheduleMeeting({
-        title: scheduleTitle.trim(),
-        date,
-        startTime,
-        endTime,
-        timezone,
-        participantEmails: getParticipantEmails(),
+      await callsApi.bookCall({
+        userId: selectedUser.id,
+        mentorId: selectedMentor.id,
+        callType: selectedCallType,
+        startTime: DateTime.now().plus({ days: 1 }).toISO(),
+        endTime: DateTime.now().plus({ days: 1, hours: 1 }).toISO(),
+        title: scheduleTitle || `Session: ${selectedUser.name} x ${selectedMentor.name}`,
       });
-      setSuccess("Meeting scheduled successfully.");
-      setScheduleTitle("");
-      setScheduleStartHour("");
-      setScheduleStartMinute("");
-      setScheduleStartAmPm("");
-      setScheduleEndHour("");
-      setScheduleEndMinute("");
-      setScheduleEndAmPm("");
-      setScheduleInlineError("");
-      setUserEmail("");
-      setMentorEmail("");
-      setAdditionalEmails([""]);
-      setOverlapSlots([]);
-      loadCalls();
-    } catch (err) {
-      setScheduleInlineError(err.message || "Failed to book call");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!success) return;
-    const timer = setTimeout(() => setSuccess(""), 2000);
-    return () => clearTimeout(timer);
-  }, [success]);
-
-  useEffect(() => {
-    const prevTz = prevDisplayTimezoneRef.current;
-    if (prevTz === displayTimezone) return;
-
-    const prevZone = prevTz === "IST" ? "Asia/Kolkata" : "UTC";
-    const newZone = displayTimezone === "IST" ? "Asia/Kolkata" : "UTC";
-
-    const convertParts = (hour, minute, amPm) => {
-      const hm = to24From12(hour, minute, amPm);
-      if (!scheduleDate || !hm) return null;
-      const dtPrev = DateTime.fromFormat(`${scheduleDate} ${hm}`, "yyyy-MM-dd HH:mm", { zone: prevZone });
-      if (!dtPrev.isValid) return null;
-      const dtNew = dtPrev.setZone(newZone);
-      return {
-        date: dtNew.toFormat("yyyy-MM-dd"),
-        hm: dtNew.toFormat("HH:mm"),
-      };
-    };
-
-    const sConv = convertParts(scheduleStartHour, scheduleStartMinute, scheduleStartAmPm);
-    const eConv = convertParts(scheduleEndHour, scheduleEndMinute, scheduleEndAmPm);
-
-    if (!sConv && !eConv) {
-      prevDisplayTimezoneRef.current = displayTimezone;
-      return;
-    }
-
-    if (sConv) {
-      setScheduleDate(sConv.date);
-      const p = hm24To12Parts(sConv.hm);
-      setScheduleStartHour(p.hour);
-      setScheduleStartMinute(p.minute);
-      setScheduleStartAmPm(p.amPm);
-    }
-    if (eConv) {
-      const p = hm24To12Parts(eConv.hm);
-      setScheduleEndHour(p.hour);
-      setScheduleEndMinute(p.minute);
-      setScheduleEndAmPm(p.amPm);
-    }
-
-    prevDisplayTimezoneRef.current = displayTimezone;
-  }, [
-    displayTimezone,
-    scheduleDate,
-    scheduleStartHour,
-    scheduleStartMinute,
-    scheduleStartAmPm,
-    scheduleEndHour,
-    scheduleEndMinute,
-    scheduleEndAmPm,
-    to24From12,
-    hm24To12Parts,
-  ]);
-
-  useEffect(() => {
-    const deletePastMeetings = async () => {
-      const current = meetingsRef.current;
-      if (!Array.isArray(current) || current.length === 0) return;
-      const now = new Date();
-      const past = current.filter((m) => m.endTime && new Date(m.endTime) <= now);
-      if (past.length === 0) return;
-      const pastIds = past.map((m) => m.id);
-      for (const m of past) {
-        try {
-          await callsApi.deleteCall(m.id);
-        } catch {
-          // ignore auto-delete errors
-        }
-      }
-      setMeetings((prev) => prev.filter((m) => !pastIds.includes(m.id)));
-    };
-
-    deletePastMeetings();
-    const id = setInterval(deletePastMeetings, 60000);
-    return () => clearInterval(id);
-  }, []);
-
-  const addAdditionalEmail = () => setAdditionalEmails((p) => [...p, ""]);
-  const setAdditionalEmail = (i, v) => {
-    setAdditionalEmails((p) => {
-      const n = [...p];
-      n[i] = v;
-      return n;
-    });
-  };
-  const removeAdditionalEmail = (i) => setAdditionalEmails((p) => p.filter((_, idx) => idx !== i));
-
-  const handleDeleteCall = async () => {
-    if (!meetingToDelete) return;
-    setDeletingMeetingId(meetingToDelete);
-    setError("");
-    try {
-      await callsApi.deleteCall(meetingToDelete);
-      setMeetings((prev) => prev.filter((m) => m.id !== meetingToDelete));
-      setMeetingToDelete(null);
-    } catch (e) {
-      setError(e.message || "Failed to delete call");
-      console.error("Delete failed:", e);
-    } finally {
-      setDeletingMeetingId(null);
-    }
-  };
-
-  const selectedTimezone = displayTimezone === "IST" ? "Asia/Kolkata" : "UTC";
-
-  /** Display week: 7 days starting at weekStart (UTC), matching API grid. */
-  const displayWeekInfo = useMemo(() => {
-    const weekStartDt = DateTime.fromISO(weekStart + "T00:00:00Z");
-    const dayKeys = [0, 1, 2, 3, 4, 5, 6].map((i) =>
-      weekStartDt.plus({ days: i }).toFormat("yyyy-MM-dd")
-    );
-    return {
-      weekStartDt,
-      dayKeys,
-      weekLabel: weekStartDt.setZone(selectedTimezone).toFormat("ccc, dd LLL"),
-    };
-  }, [weekStart, selectedTimezone]);
-
-  const prevWeek = () => {
-    setWeekStart(
-      DateTime.fromISO(weekStart + "T00:00:00Z").minus({ days: 7 }).toFormat("yyyy-MM-dd")
-    );
-  };
-  const nextWeek = () => {
-    setWeekStart(
-      DateTime.fromISO(weekStart + "T00:00:00Z").plus({ days: 7 }).toFormat("yyyy-MM-dd")
-    );
-  };
-
-  /** Group slots by backend date key; only time display converts to tz. Keeps cross-midnight slots on original day. */
-  const groupSlotsByLocalDate = useCallback((data, tz) => {
-    if (!data || !data.availability) return { dates: [], byDate: {} };
-
-    const byDate = {};
-
-    for (const [dateKey, slots] of Object.entries(data.availability)) {
-      for (const slot of slots || []) {
-        const localStart = DateTime.fromISO(slot.startTime, { zone: "utc" }).setZone(tz);
-        const localEnd = DateTime.fromISO(slot.endTime, { zone: "utc" }).setZone(tz);
-
-        const convertedStart = localStart.toFormat("HH:mm");
-        const convertedEnd = localEnd.toFormat("HH:mm");
-
-        if (!byDate[dateKey]) {
-          const label = DateTime.fromISO(dateKey + "T00:00:00", { zone: tz }).toFormat("ccc, dd LLL");
-          byDate[dateKey] = { dayLabel: label, slots: [] };
-        }
-
-        byDate[dateKey].slots.push({
-          ...slot,
-          convertedStart,
-          convertedEnd,
-        });
-      }
-    }
-
-    return { dates: Object.keys(byDate).sort(), byDate };
-  }, []);
-
-  /** Group flat slots (with startTime/endTime) by local date in selected timezone. */
-  const groupFlatSlotsByLocalDate = useCallback((slots, tz) => {
-    if (!Array.isArray(slots) || slots.length === 0) return { dates: [], byDate: {} };
-    const byDate = {};
-    for (const slot of slots) {
-      const localStart = DateTime.fromISO(slot.startTime, { zone: "utc" }).setZone(tz);
-      const localEnd = DateTime.fromISO(slot.endTime, { zone: "utc" }).setZone(tz);
-      const localDateKey = localStart.toFormat("yyyy-MM-dd");
-      const dayLabel = localStart.toFormat("ccc, dd LLL");
-      const convertedStart = localStart.toFormat("HH:mm");
-      const convertedEnd = localEnd.toFormat("HH:mm");
-      if (!byDate[localDateKey]) byDate[localDateKey] = { dayLabel, slots: [] };
-      byDate[localDateKey].slots.push({ ...slot, convertedStart, convertedEnd });
-    }
-    return { dates: Object.keys(byDate).sort(), byDate };
-  }, []);
-
-  const flattenSlots = (data) =>
-    !data
-      ? []
-      : Object.entries(data.availability || {}).flatMap(([dateStr, slots]) =>
-          (slots || []).map((s) => ({ ...s, dateStr }))
-        );
-
-  const userSlotsFlat = flattenSlots(userAvailability);
-  const mentorSlotsFlat = flattenSlots(mentorAvailability);
-
-  const userByLocalDate = useMemo(
-    () => groupFlatSlotsByLocalDate(userSlotsFlat, selectedTimezone),
-    [userSlotsFlat, selectedTimezone, groupFlatSlotsByLocalDate]
-  );
-
-  const mentorByLocalDate = useMemo(
-    () => groupFlatSlotsByLocalDate(mentorSlotsFlat, selectedTimezone),
-    [mentorSlotsFlat, selectedTimezone, groupFlatSlotsByLocalDate]
-  );
-
-  const upcomingDays = useMemo(() => {
-    const today = DateTime.now().setZone(selectedTimezone).startOf("day");
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = today.plus({ days: i });
-      return {
-        key: d.toFormat("yyyy-MM-dd"),
-        label: d.toFormat("ccc, dd LLL"),
-      };
-    });
-  }, [selectedTimezone]);
-
-  const formatSlotsForDay = (slots, emptyLabel = "No availability") => {
-    if (!slots || slots.length === 0) return emptyLabel;
-    return slots
-      .map((slot) => formatTimeRange(`${slot.convertedStart} – ${slot.convertedEnd}`))
-      .join(", ");
-  };
-
-  const parseHmToMinutes = (hm) => {
-    if (!hm) return null;
-    const [hStr, mStr] = hm.split(":");
-    const h = Number(hStr);
-    const m = Number(mStr);
-    if (Number.isNaN(h) || Number.isNaN(m)) return null;
-    return h * 60 + m;
-  };
-
-  const minutesToHm = (minutes) => {
-    let total = minutes;
-    if (total < 0) total = 0;
-    if (total > 1440) total = 1440;
-    if (total === 1440) total = 0; // treat midnight as 00:00 of next day
-    const h = Math.floor(total / 60);
-    const m = total % 60;
-    const hh = h.toString().padStart(2, "0");
-    const mm = m.toString().padStart(2, "0");
-    return `${hh}:${mm}`;
-  };
-
-  const computeCommonSlotsForDay = (userSlots = [], mentorSlots = []) => {
-    const results = [];
-    for (const u of userSlots) {
-      const uStart = parseHmToMinutes(u.convertedStart);
-      const uEndRaw = parseHmToMinutes(u.convertedEnd);
-      if (uStart == null || uEndRaw == null) continue;
-      let uEnd = uEndRaw;
-      if (uEnd <= uStart) uEnd += 1440; // handle local cross-midnight
-
-      for (const m of mentorSlots) {
-        const mStart = parseHmToMinutes(m.convertedStart);
-        const mEndRaw = parseHmToMinutes(m.convertedEnd);
-        if (mStart == null || mEndRaw == null) continue;
-        let mEnd = mEndRaw;
-        if (mEnd <= mStart) mEnd += 1440;
-
-        let start = Math.max(uStart, mStart, 0);
-        let end = Math.min(uEnd, mEnd, 1440);
-
-        if (end <= start) continue; // no overlap or just touching
-
-        const startHm = minutesToHm(start);
-        const endHm = minutesToHm(end);
-        results.push({ startHm, endHm });
-      }
-    }
-    return results;
-  };
-
-  const meetingsByDate = useMemo(() => {
-    if (!Array.isArray(meetings) || meetings.length === 0) return {};
-    const byDate = {};
-    for (const m of meetings) {
-      if (!m.startTime) continue;
-      const start = DateTime.fromISO(m.startTime, { zone: "utc" }).setZone(selectedTimezone);
-      const end = m.endTime
-        ? DateTime.fromISO(m.endTime, { zone: "utc" }).setZone(selectedTimezone)
-        : null;
-      const key = start.toFormat("yyyy-MM-dd");
-      if (!byDate[key]) byDate[key] = [];
-      byDate[key].push({
-        ...m,
-        localStartLabel: start.toFormat("h:mm a"),
-        localEndLabel: end ? end.toFormat("h:mm a") : "",
-      });
-    }
-    Object.keys(byDate).forEach((k) => {
-      byDate[k].sort(
-        (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
-      );
-    });
-    return byDate;
-  }, [meetings, selectedTimezone]);
-
-  const parse12HourTo24 = (timeStr) => {
-    if (!timeStr) return "";
-    const parts = timeStr.trim().split(/\s+/);
-    if (parts.length < 2) return "";
-    const time = parts[0];
-    const periodRaw = parts[1] || "";
-    const period = periodRaw.toUpperCase();
-    const [hStr, mStr = "00"] = time.split(":");
-    let h = Number(hStr);
-    const m = Number(mStr);
-    if (Number.isNaN(h) || Number.isNaN(m)) return "";
-
-    if (period === "AM") {
-      if (h === 12) h = 0;
-    } else if (period === "PM") {
-      if (h !== 12) h += 12;
-    }
-
-    const hh = `${h}`.padStart(2, "0");
-    const mm = `${m}`.padStart(2, "0");
-    return `${hh}:${mm}`;
-  };
-
-  const parse12RangeTo24 = (rangeStr) => {
-    if (!rangeStr) return { start: "", end: "" };
-    const parts = rangeStr.split("–");
-    if (parts.length !== 2) return { start: "", end: "" };
-    const start12 = parts[0].trim();
-    const end12 = parts[1].trim();
-    return {
-      start: parse12HourTo24(start12),
-      end: parse12HourTo24(end12),
-    };
+      loadData();
+      setBookingStep(1);
+      setActiveTab("meetings");
+    } catch (err) { setError("Booking failed"); }
+    setLoading(false);
   };
 
   return (
-    <div className="space-y-6">
-      {error && (
-        <div className="text-red-400 text-sm font-medium bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2">
-          {error}
-        </div>
-      )}
-
-      <div className="flex flex-row items-start gap-4 w-full">
-        {/* LEFT: Availability Viewer */}
-        <div
-          className="min-w-0 overflow-hidden space-y-4"
-          style={{ flex: "0 0 70%", width: "70%", maxWidth: "70%" }}
-        >
+    <div className="max-w-[1400px] mx-auto px-4 py-8 space-y-8 animate-in fade-in duration-700">
+      {/* Header & Tabs */}
+      <div className="space-y-6">
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-white">Admin Dashboard</h1>
-            <p className="text-slate-400 font-medium mt-1">
-              View user/mentor availability, find overlaps, and schedule meetings.
-            </p>
+            <h1 className="text-3xl font-extrabold text-white tracking-tight italic">ADMIN CONSOLE</h1>
+            <p className="text-slate-500 mt-1 font-bold text-[10px] uppercase tracking-widest px-1">Management Suite v2.0</p>
           </div>
-
-          <div className="w-full flex flex-wrap md:flex-nowrap items-end gap-4">
-            <div className="w-full md:flex-1">
-              <label className="block text-sm font-medium text-slate-400 mb-1">Timezone</label>
-              <select
-                value={displayTimezone}
-                onChange={(e) => setDisplayTimezone(e.target.value)}
-                className="w-full rounded-lg bg-slate-900 border border-slate-800 text-white font-medium px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {TIMEZONE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="w-full md:flex-1 min-w-[220px]">
-              <label className="block text-sm font-medium text-slate-400 mb-1">User</label>
-              <div className="flex gap-2">
-                <div className="relative flex-1 min-w-[260px] group">
-                  <select
-                    value={selectedUser ? selectedUser.id : ""}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      if (!id) {
-                        setSelectedUser(null);
-                        setUserEmail("");
-                        return;
-                      }
-                      setSelectedUser(users.find((u) => u.id === id) || null);
-                    }}
-                    className="w-full min-w-[260px] h-11 appearance-none rounded-xl bg-slate-900 border border-slate-800 text-white font-medium px-4 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition shadow-sm"
-                  >
-                    <option value="">Select user</option>
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name} ({u.email})
-                      </option>
-                    ))}
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
-                    <svg
-                      className="w-4 h-4 text-slate-400 transition-transform group-focus-within:rotate-180"
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => selectedUser ? setShowEditUserModal(true) : setShowAddUserModal(true)}
-                  className="h-11 rounded-full bg-blue-600 hover:bg-blue-500 text-white font-semibold px-6 shadow-lg shadow-blue-900/10 active:scale-95 transition inline-flex items-center gap-2"
-                  title={selectedUser ? "Edit metadata" : "Add new user"}
-                >
-                  <span aria-hidden className="text-xl font-bold">{selectedUser ? "✎" : "+"}</span>
-                  {selectedUser ? "Edit" : "New"}
-                </button>
-              </div>
-            </div>
-            <div className="w-full md:flex-1 min-w-[220px]">
-              <label className="block text-sm font-medium text-slate-400 mb-1">Mentor</label>
-              <div className="flex gap-2">
-                <div className="relative flex-1 min-w-[260px] group">
-                  <select
-                    value={selectedMentor ? selectedMentor.id : ""}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      if (!id) {
-                        setSelectedMentor(null);
-                        setMentorEmail("");
-                        return;
-                      }
-                      setSelectedMentor(mentors.find((m) => m.id === id) || null);
-                    }}
-                    className="w-full min-w-[260px] h-11 appearance-none rounded-xl bg-slate-900 border border-slate-800 text-white font-medium px-4 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition shadow-sm"
-                  >
-                    <option value="">Select mentor</option>
-                    {mentors.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name} ({m.email})
-                      </option>
-                    ))}
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
-                    <svg
-                      className="w-4 h-4 text-slate-400 transition-transform group-focus-within:rotate-180"
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => selectedMentor ? setShowEditMentorModal(true) : setShowAddMentorModal(true)}
-                  className="h-11 rounded-full bg-blue-600 hover:bg-blue-500 text-white font-semibold px-6 shadow-lg shadow-blue-900/10 active:scale-95 transition inline-flex items-center gap-2"
-                  title={selectedMentor ? "Edit metadata" : "Add new mentor"}
-                >
-                  <span aria-hidden className="text-xl font-bold">{selectedMentor ? "✎" : "+"}</span>
-                  {selectedMentor ? "Edit" : "New"}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl bg-slate-900 border border-slate-800 overflow-hidden p-4 flex flex-col">
-            {!availabilityTarget ? (
-              <>
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h3 className="text-sm font-semibold text-white">Meetings</h3>
-                    <p className="text-xs text-slate-400">
-                      Showing today and next 6 days
-                    </p>
-                  </div>
-                </div>
-                <div className="flex-1 overflow-y-auto">
-                  <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
-                    {upcomingDays.map(({ key, label }) => {
-                      const dayMeetings = meetingsByDate[key] || [];
-                      const day = DateTime.fromISO(`${key}T00:00:00`, { zone: selectedTimezone });
-                      const dayName = day.toFormat("ccc");
-                      const dayDate = day.toFormat("dd LLL");
-                      const tzLabel = displayTimezone === "IST" ? "IST" : "GMT";
-                      return (
-                        <div
-                          key={key}
-                          className="rounded-xl bg-slate-900/80 border border-slate-800 px-3 py-2 flex flex-col min-h-[120px]"
-                        >
-                          <div className="mb-2">
-                            <p className="text-xs font-semibold text-slate-200">{dayName}</p>
-                            <p className="text-xs text-slate-500">{dayDate}</p>
-                          </div>
-                          <div className="space-y-2">
-                            {dayMeetings.map((m) => (
-                              <button
-                                key={m.id}
-                                type="button"
-                                onClick={() => setActiveMeeting(m)}
-                                className="w-full text-left rounded-lg bg-slate-800/80 border border-slate-700 px-3 py-2 hover:bg-slate-800 transition"
-                              >
-                                <p className="text-xs font-semibold text-white truncate">{m.title}</p>
-                                <p className="text-[11px] text-slate-300 mt-0.5">
-                                  {m.localStartLabel} – {m.localEndLabel} {tzLabel}
-                                </p>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </>
-            ) : loadingUserAvail || loadingMentorAvail ? (
-              <div className="flex items-center justify-center h-64">
-                <p className="text-slate-400 text-sm">Loading availability...</p>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center justify-between gap-2 mb-4">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {selectedUser && (
-                      <span className="text-slate-300 text-sm">
-                        User: {selectedUser.name}
-                      </span>
-                    )}
-                    {selectedUser && selectedMentor && <span className="text-slate-500">|</span>}
-                    {selectedMentor && (
-                      <span className="text-slate-300 text-sm">
-                        Mentor: {selectedMentor.name}
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-slate-400 text-xs">
-                    Showing today and next 6 days ({displayTimezone})
-                  </div>
-                </div>
-                <div className="flex-1 overflow-y-auto">
-                  <table className="w-full border-collapse table-auto">
-                    <thead>
-                      <tr className="border-b border-slate-700">
-                        <th className="py-4 px-4 text-left text-sm font-semibold text-slate-200 w-[150px] whitespace-nowrap">
-                          Date
-                        </th>
-                        <th className="py-4 px-4 text-left text-sm font-semibold text-slate-200 whitespace-nowrap">
-                          User Availability
-                        </th>
-                        <th className="py-4 px-4 text-left text-xs md:text-sm font-semibold text-slate-200 whitespace-nowrap">
-                          Mentor Availability
-                        </th>
-                        <th className="py-4 px-4 text-left text-sm font-semibold text-slate-200 whitespace-nowrap">
-                          Common Times
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {upcomingDays.map(({ key, label }, index) => {
-                        const userSlots = userByLocalDate.byDate[key]?.slots ?? [];
-                        const mentorSlots = mentorByLocalDate.byDate[key]?.slots ?? [];
-                        const commonIntervals = computeCommonSlotsForDay(userSlots, mentorSlots);
-                        const commonText =
-                          commonIntervals.length > 0
-                            ? commonIntervals
-                                .map(({ startHm, endHm }) =>
-                                  formatTimeRange(`${startHm} – ${endHm}`)
-                                )
-                                .join(", ")
-                            : "—";
-                        const rowBg =
-                          index % 2 === 0 ? "bg-slate-900/40" : "bg-slate-900/20";
-                        return (
-                          <tr key={key} className={`${rowBg} border-b border-slate-800/80`}>
-                            <td className="py-4 px-4 text-sm font-semibold text-slate-200 whitespace-nowrap align-middle">
-                              {label}
-                            </td>
-                            <td className="py-4 px-4 text-sm text-slate-300 align-top">
-                              {userSlots.length === 0 ? (
-                                <span className="text-slate-500">No availability</span>
-                              ) : (
-                                <div className="flex flex-wrap gap-2">
-                                  {userSlots.map((slot) => (
-                                    <span
-                                      key={slot.startTime}
-                                      className="inline-flex items-center rounded-md bg-slate-800/90 border border-slate-600 px-2 py-1 text-xs text-slate-100"
-                                    >
-                                      {formatTimeRange(
-                                        `${slot.convertedStart} – ${slot.convertedEnd}`
-                                      )}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                            </td>
-                            <td className="py-4 px-4 text-sm text-slate-300 align-top">
-                              {mentorSlots.length === 0 ? (
-                                <span className="text-slate-500">No availability</span>
-                              ) : (
-                                <div className="flex flex-wrap gap-2">
-                                  {mentorSlots.map((slot) => (
-                                    <span
-                                      key={slot.startTime}
-                                      className="inline-flex items-center rounded-md bg-slate-800/90 border border-slate-600 px-2 py-1 text-xs text-slate-100"
-                                    >
-                                      {formatTimeRange(
-                                        `${slot.convertedStart} – ${slot.convertedEnd}`
-                                      )}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                            </td>
-                            <td className="py-4 px-4 text-sm text-slate-100 align-top">
-                              {commonIntervals.length === 0 ? (
-                                <span className="text-slate-500">—</span>
-                              ) : (
-                                <div className="flex flex-wrap gap-2">
-                                  {commonIntervals.map(({ startHm, endHm }, idx) => {
-                                    const slotKey = `${key}-${startHm}-${endHm}`;
-                                    const isSelected = selectedCommonSlot === slotKey;
-                                    return (
-                                      <button
-                                        key={slotKey}
-                                        type="button"
-                                        onClick={() => {
-                                          setSelectedCommonSlot(slotKey);
-                                          const dateStr = key; // yyyy-MM-dd in selected timezone
-                                          const labelRange = formatTimeRange(`${startHm} – ${endHm}`);
-                                          const { start, end } = parse12RangeTo24(labelRange);
-                                          setScheduleDate(dateStr);
-                                          if (start) {
-                                            const p = hm24To12Parts(start);
-                                            setScheduleStartHour(p.hour);
-                                            setScheduleStartMinute(p.minute);
-                                            setScheduleStartAmPm(p.amPm);
-                                          }
-                                          if (end) {
-                                            const p = hm24To12Parts(end);
-                                            setScheduleEndHour(p.hour);
-                                            setScheduleEndMinute(p.minute);
-                                            setScheduleEndAmPm(p.amPm);
-                                          }
-                                          setScheduleInlineError("");
-
-                                          const userEmailLocal = userEmail || selectedUser?.email || "";
-                                          const mentorEmailLocal = mentorEmail || selectedMentor?.email || "";
-                                          const userName =
-                                            userEmailLocal.split("@")[0] || "user";
-                                          const mentorName =
-                                            mentorEmailLocal.split("@")[0] || "mentor";
-                                          setScheduleTitle(`MTQ<>${userName}:${mentorName}`);
-                                        }}
-                                        className={`inline-flex items-center rounded-md px-2 py-1 text-xs ${
-                                          isSelected
-                                            ? "bg-emerald-700 border border-emerald-300 text-emerald-50"
-                                            : "bg-emerald-800/70 border border-emerald-400 text-emerald-100"
-                                        }`}
-                                      >
-                                        {formatTimeRange(`${startHm} – ${endHm}`)}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* RIGHT: Schedule Meeting sidebar */}
-        <div
-          className="min-w-0 flex-shrink-0"
-          style={{ flex: "0 0 30%", width: "30%", maxWidth: "30%" }}
-        >
-          <div className="rounded-2xl bg-slate-900 border border-slate-800 p-4 flex flex-col">
-            <h2 className="text-lg font-semibold text-white mb-3">Book Call</h2>
-            <form onSubmit={handleScheduleMeeting} className="space-y-3 flex-1 flex flex-col">
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">Admin email</label>
-                <input
-                  type="email"
-                  value={adminEmail}
-                  disabled
-                  className="w-full box-border rounded-lg bg-slate-950 border border-slate-800 text-slate-400 px-4 py-1.5 cursor-not-allowed"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">User email</label>
-                <input
-                  type="email"
-                  value={userEmail}
-                  onChange={(e) => setUserEmail(e.target.value)}
-                  className="w-full box-border rounded-lg bg-slate-950 border border-slate-800 text-white px-4 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="user@example.com"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">Mentor email</label>
-                <input
-                  type="email"
-                  value={mentorEmail}
-                  onChange={(e) => setMentorEmail(e.target.value)}
-                  className="w-full box-border rounded-lg bg-slate-950 border border-slate-800 text-white px-4 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="mentor@example.com"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">Additional emails</label>
-                {additionalEmails.map((email, i) => (
-                  <div key={i} className="flex items-stretch gap-2 mb-2">
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setAdditionalEmail(i, e.target.value)}
-                      className="flex-1 min-w-0 box-border rounded-lg bg-slate-950 border border-slate-800 text-white px-4 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="email@example.com"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeAdditionalEmail(i)}
-                      className="rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-slate-400 hover:text-white text-sm whitespace-nowrap"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={addAdditionalEmail}
-                  className="text-sm text-blue-400 hover:underline"
-                >
-                  + Add email
-                </button>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">Call name</label>
-                <input
-                  type="text"
-                  value={scheduleTitle}
-                  onChange={(e) => setScheduleTitle(e.target.value)}
-                  required
-                  className="w-full box-border rounded-lg bg-slate-950 border border-slate-800 text-white px-4 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Meeting title"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">Date</label>
-                <input
-                  type="date"
-                  value={scheduleDate}
-                  onChange={(e) => {
-                    setScheduleDate(e.target.value);
-                    setScheduleInlineError("");
-                  }}
-                  className="w-full box-border rounded-lg bg-slate-950 border border-slate-800 text-white px-4 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">Start time</label>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={scheduleStartHour}
-                    onChange={(e) => {
-                      setScheduleStartHour(e.target.value);
-                      setScheduleInlineError("");
-                    }}
-                    className={scheduleTimeSelectClass}
-                    aria-label="Start hour"
-                  >
-                    <option value="">Hour</option>
-                    {SCHEDULE_HOUR_OPTIONS.map((h) => (
-                      <option key={h} value={h}>
-                        {h}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="text-slate-400 shrink-0" aria-hidden>
-                    :
-                  </span>
-                  <select
-                    value={scheduleStartMinute}
-                    onChange={(e) => {
-                      setScheduleStartMinute(e.target.value);
-                      setScheduleInlineError("");
-                    }}
-                    className={scheduleTimeSelectClass}
-                    aria-label="Start minute"
-                  >
-                    <option value="">Min</option>
-                    {SCHEDULE_MINUTE_OPTIONS.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={scheduleStartAmPm}
-                    onChange={(e) => {
-                      setScheduleStartAmPm(e.target.value);
-                      setScheduleInlineError("");
-                    }}
-                    className={scheduleTimeSelectClass}
-                    aria-label="Start AM or PM"
-                  >
-                    <option value="">AM/PM</option>
-                    {SCHEDULE_AMPM_OPTIONS.map((ap) => (
-                      <option key={ap} value={ap}>
-                        {ap}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">End time</label>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={scheduleEndHour}
-                    onChange={(e) => {
-                      setScheduleEndHour(e.target.value);
-                      setScheduleInlineError("");
-                    }}
-                    className={scheduleTimeSelectClass}
-                    aria-label="End hour"
-                  >
-                    <option value="">Hour</option>
-                    {SCHEDULE_HOUR_OPTIONS.map((h) => (
-                      <option key={h} value={h}>
-                        {h}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="text-slate-400 shrink-0" aria-hidden>
-                    :
-                  </span>
-                  <select
-                    value={scheduleEndMinute}
-                    onChange={(e) => {
-                      setScheduleEndMinute(e.target.value);
-                      setScheduleInlineError("");
-                    }}
-                    className={scheduleTimeSelectClass}
-                    aria-label="End minute"
-                  >
-                    <option value="">Min</option>
-                    {SCHEDULE_MINUTE_OPTIONS.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={scheduleEndAmPm}
-                    onChange={(e) => {
-                      setScheduleEndAmPm(e.target.value);
-                      setScheduleInlineError("");
-                    }}
-                    className={scheduleTimeSelectClass}
-                    aria-label="End AM or PM"
-                  >
-                    <option value="">AM/PM</option>
-                    {SCHEDULE_AMPM_OPTIONS.map((ap) => (
-                      <option key={ap} value={ap}>
-                        {ap}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              {scheduleInlineError && (
-                <div className="rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs px-3 py-2">
-                  {scheduleInlineError}
-                </div>
-              )}
-              {success && (
-                <div className="rounded-lg bg-emerald-900/30 border border-emerald-500/40 text-emerald-200 text-xs px-3 py-2">
-                  {success}
-                </div>
-              )}
+          
+          <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 p-1 rounded-2xl shadow-2xl">
+            {['schedule', 'meetings', 'users'].map(tab => (
               <button
-                type="submit"
-                disabled={loading}
-                className="w-full rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium px-6 py-2.5 transition disabled:opacity-50"
+                key={tab}
+                onClick={() => {
+                  setActiveTab(tab);
+                  if (tab === "meetings") loadData();
+                }}
+                className={`px-8 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-300 ${
+                  activeTab === tab 
+                    ? "bg-blue-600 text-white shadow-xl shadow-blue-900/40 scale-105" 
+                    : "text-slate-500 hover:text-slate-300 hover:bg-slate-800"
+                }`}
               >
-                {loading ? "Saving..." : "Schedule Meeting"}
+                {tab.replace('meetings', 'History').replace('users', 'Directory')}
               </button>
-            </form>
+            ))}
+          </div>
+
+          <div className="flex bg-slate-900 border border-slate-800 rounded-xl p-1 shrink-0">
+            {['IST', 'GMT'].map(tz => (
+              <button
+                key={tz}
+                onClick={() => setDisplayTimezone(tz)}
+                className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-tighter transition-all ${
+                  displayTimezone === tz ? "bg-slate-800 text-white" : "text-slate-600 hover:text-slate-400"
+                }`}
+              >
+                {tz}
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Meetings calendar - full width below (when availability is shown) */}
-      {availabilityTarget && (
-        <div className="rounded-2xl bg-slate-900 border border-slate-800 p-6 mt-4">
-          <h2 className="text-lg font-semibold text-white mb-4">Meetings</h2>
-          <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
-            {upcomingDays.map(({ key, label }) => {
-              const dayMeetings = meetingsByDate[key] || [];
-              const day = DateTime.fromISO(`${key}T00:00:00`, { zone: selectedTimezone });
-              const dayName = day.toFormat("ccc");
-              const dayDate = day.toFormat("dd LLL");
-              const tzLabel = displayTimezone === "IST" ? "IST" : "GMT";
-              return (
-                <div
-                  key={key}
-                  className="rounded-xl bg-slate-900/80 border border-slate-800 px-3 py-2 flex flex-col min-h-[120px]"
-                >
-                  <div className="mb-2">
-                    <p className="text-xs font-semibold text-slate-200">{dayName}</p>
-                    <p className="text-xs text-slate-500">{dayDate}</p>
+      <div className="relative min-h-[600px]">
+        {activeTab === "schedule" && (
+          <div className="space-y-12 animate-in slide-in-from-bottom-4 duration-500">
+            {/* Steps Indicator */}
+            <div className="flex items-center justify-between max-w-4xl mx-auto px-10">
+              {[1, 2, 3, 4, 5].map(s => (
+                <div key={s} className="flex flex-col items-center gap-3 relative group">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-black transition-all duration-500 ${
+                    bookingStep === s ? "bg-blue-600 text-white scale-110 shadow-2xl shadow-blue-900/60 ring-4 ring-blue-900/20" : 
+                    bookingStep > s ? "bg-emerald-600 text-white shadow-xl shadow-emerald-900/20" : "bg-slate-900 border border-slate-800 text-slate-700"
+                  }`}>
+                    {bookingStep > s ? "✓" : s}
                   </div>
-                  <div className="space-y-2">
-                    {dayMeetings.map((m) => (
+                  <span className={`text-[9px] font-black uppercase tracking-widest transition-colors duration-300 ${
+                    bookingStep === s ? "text-blue-400" : "text-slate-600"
+                  }`}>STEP 0{s}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="max-w-4xl mx-auto min-h-[400px]">
+              {bookingStep === 1 && (
+                <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
+                  <div className="text-center space-y-2">
+                    <h2 className="text-2xl font-black text-white italic">SELECT TARGET USER</h2>
+                    <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Step 01 - Choose the profile that needs a session</p>
+                  </div>
+                  
+                  <div className="relative group max-w-xl mx-auto">
+                    <input
+                      type="text"
+                      placeholder="Search profiles..."
+                      value={userSearch}
+                      onChange={(e) => setUserSearch(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-2xl px-6 py-4 text-white outline-none focus:ring-4 focus:ring-blue-600/20 focus:border-blue-600 transition-all placeholder:text-slate-700"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {users.filter(u => u.name.toLowerCase().includes(userSearch.toLowerCase())).map(u => (
                       <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => setActiveMeeting(m)}
-                        className="w-full text-left rounded-lg bg-slate-800/80 border border-slate-700 px-3 py-2 hover:bg-slate-800 transition"
+                        key={u.id}
+                        onClick={() => handleSelectUser(u)}
+                        className="flex items-center gap-4 p-5 rounded-3xl bg-slate-900 border border-slate-800 hover:border-blue-500/50 hover:bg-slate-800/50 transition-all group text-left shadow-xl"
                       >
-                        <p className="text-xs font-semibold text-white truncate">{m.title}</p>
-                        <p className="text-[11px] text-slate-300 mt-0.5">
-                          {m.localStartLabel} – {m.localEndLabel} {tzLabel}
-                        </p>
+                        <div className="w-14 h-14 rounded-2xl bg-slate-800 flex items-center justify-center text-slate-500 font-black group-hover:bg-blue-600/20 group-hover:text-blue-400 transition-all">
+                          {u.name[0]}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-white truncate">{u.name}</p>
+                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter truncate">{u.email}</p>
+                        </div>
                       </button>
                     ))}
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Meeting details modal */}
-      {activeMeeting && (
-        <div
-          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
-          onClick={() => setActiveMeeting(null)}
-        >
-          <div
-            className="rounded-2xl bg-slate-900 border border-slate-800 shadow-xl max-w-lg w-full p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-lg font-semibold text-white mb-3">
-              {activeMeeting.title}
-            </h3>
-            <p className="text-sm text-slate-300 mb-2">
-              {activeMeeting.startTime &&
-                new Date(activeMeeting.startTime).toLocaleDateString("en-US", {
-                  weekday: "long",
-                  month: "long",
-                  day: "numeric",
-                  year: "numeric",
-                  timeZone: displayTimezone === "IST" ? "Asia/Kolkata" : "UTC",
-                })}
-            </p>
-            <p className="text-sm text-slate-200 mb-4">
-              {formatSlotLabel(activeMeeting.startTime, activeMeeting.endTime, displayTimezone)}{" "}
-              ({displayTimezone === "IST" ? "IST" : "GMT"})
-            </p>
-
-            <div className="mb-4">
-              <p className="text-xs font-semibold text-slate-400 mb-1">Attendees</p>
-              {activeMeeting.participants?.length ? (
-                <ul className="text-xs text-slate-200 space-y-0.5">
-                  {activeMeeting.participants.map((p) => (
-                    <li key={p.email}>{p.email}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-xs text-slate-500">No attendees listed</p>
               )}
-            </div>
 
-            <div className="mb-4">
-              <p className="text-xs font-semibold text-slate-400 mb-1">Google Meet link</p>
-              {activeMeeting.meetLink ? (
-                <div className="flex items-center gap-2">
-                  <a
-                    href={activeMeeting.meetLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-blue-400 hover:text-blue-300 hover:underline break-all flex-1"
-                  >
-                    {activeMeeting.meetLink}
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!activeMeeting) return;
-                      const tzLabel =
-                        displayTimezone === "IST" ? "IST (GMT+5:30)" : "GMT (GMT+0)";
-                      const datePart = activeMeeting.startTime
-                        ? new Date(activeMeeting.startTime).toLocaleDateString("en-US", {
-                            weekday: "long",
-                            month: "long",
-                            day: "numeric",
-                            timeZone: displayTimezone === "IST" ? "Asia/Kolkata" : "UTC",
-                          })
-                        : "";
-                      const timeRange =
-                        activeMeeting.startTime && activeMeeting.endTime
-                          ? formatSlotLabel(
-                              activeMeeting.startTime,
-                              activeMeeting.endTime,
-                              displayTimezone
-                            )
-                          : "";
-                      const attendees =
-                        activeMeeting.participants && activeMeeting.participants.length
-                          ? activeMeeting.participants.map((p) => p.email).join(", ")
-                          : "";
-                      const lines = [
-                        activeMeeting.title || "",
-                        datePart && timeRange
-                          ? `${datePart} · ${timeRange}`
-                          : datePart || timeRange,
-                        `Time zone: ${tzLabel}`,
-                        `Attendees: ${attendees}`,
-                        "Google Meet joining info",
-                        `Video call link: ${activeMeeting.meetLink || "Link pending"}`,
-                      ].join("\n");
-
-                      navigator.clipboard.writeText(lines);
-                      setCopiedMeetingDetails(true);
-                      setTimeout(() => setCopiedMeetingDetails(false), 1500);
-                    }}
-                    className="inline-flex items-center justify-center rounded-lg border border-slate-600 bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-medium px-2 py-1"
-                  >
-                    {copiedMeetingDetails ? "Copied!" : "Copy"}
-                  </button>
+              {bookingStep === 2 && (
+                <div className="space-y-10 animate-in fade-in slide-in-from-right-8 duration-500 text-center">
+                  <div className="space-y-2">
+                    <h2 className="text-2xl font-black text-white italic">SESSION BLUEPRINT</h2>
+                    <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Step 02 - Defining the session focus for {selectedUser?.name}</p>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {[
+                      { id: "RESUME_REVAMP", t: "Resume Revamp", i: "📄", d: "Strategic profile optimization" },
+                      { id: "JOB_MARKET_GUIDANCE", t: "Market Guidance", i: "📈", d: "Career navigation & insights" },
+                      { id: "MOCK_INTERVIEW", t: "Mock Interview", i: "💬", d: "Live simulation & feedback" }
+                    ].map(type => (
+                      <button
+                        key={type.id}
+                        onClick={() => handleSelectCallType(type.id)}
+                        className="p-8 rounded-[40px] bg-slate-900 border border-slate-800 hover:border-blue-600/50 hover:scale-105 transition-all duration-300 group shadow-2xl relative overflow-hidden"
+                      >
+                        <div className="text-5xl mb-4 group-hover:scale-110 transition duration-300">{type.i}</div>
+                        <h3 className="font-black text-white text-sm uppercase tracking-widest mb-2">{type.t}</h3>
+                        <p className="text-[9px] text-slate-500 font-bold uppercase leading-relaxed">{type.d}</p>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              ) : (
-                <p className="text-xs text-slate-500">Link pending</p>
+              )}
+              {bookingStep === 3 && (
+                <div className="space-y-8 animate-in fade-in slide-in-from-right-8 duration-500">
+                  <div className="text-center space-y-2">
+                    <h2 className="text-2xl font-black text-white italic">EXPERT CALIBRATION</h2>
+                    <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Step 03 - AI-powered mentor recommendations based on domain overlap</p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4">
+                    {recommendations.map(rec => (
+                      <div key={rec.id} className="p-6 rounded-[32px] bg-slate-900 border border-slate-800 flex items-center justify-between group hover:border-blue-500/30 transition-all shadow-xl">
+                        <div className="flex items-center gap-6">
+                           <div className="w-20 h-20 rounded-3xl bg-slate-800 flex items-center justify-center text-3xl font-black group-hover:scale-105 transition duration-500">{rec.name[0]}</div>
+                           <div>
+                              <div className="flex items-center gap-3">
+                                 <h3 className="font-bold text-xl text-white tracking-tight">{rec.name}</h3>
+                                 <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-black border border-emerald-500/20">{Math.round(rec.score)} SCORE</span>
+                              </div>
+                              <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1 opacity-60">{rec.reason.split('.')[0]}</p>
+                           </div>
+                        </div>
+                        <button onClick={() => handleSelectMentor(rec)} className="bg-blue-600 hover:bg-blue-500 text-white font-black py-4 px-10 rounded-2xl shadow-xl shadow-blue-900/40 transition active:scale-95 text-xs uppercase tracking-widest">Select</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {bookingStep === 4 && (
+                <div className="space-y-8 animate-in fade-in zoom-in-95 duration-500 text-center">
+                  <div className="space-y-2">
+                    <h2 className="text-2xl font-black text-white italic">TEMPORAL ALIGNMENT</h2>
+                    <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Step 04 - Confirming slot accessibility with {selectedMentor?.name}</p>
+                  </div>
+                  <div className="p-12 rounded-[40px] bg-slate-900 border border-slate-800 inline-block shadow-2xl">
+                    <p className="text-slate-400 font-medium mb-6">Simulation restricted to next available production window</p>
+                    <button onClick={() => setBookingStep(5)} className="px-12 py-5 bg-blue-600 text-white font-black rounded-2xl hover:scale-105 transition shadow-xl shadow-blue-900/40 uppercase tracking-widest text-xs">Proceed to Validation</button>
+                  </div>
+                </div>
+              )}
+
+              {bookingStep === 5 && (
+                <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-500">
+                  <div className="text-center space-y-2">
+                    <h2 className="text-3xl font-black text-white italic">FINAL VERIFICATION</h2>
+                    <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Step 05 - Deploying session to production registry</p>
+                  </div>
+                  <form onSubmit={handleScheduleMeeting} className="space-y-6">
+                    <div className="p-8 rounded-[40px] bg-slate-900 border border-slate-800 shadow-2xl relative overflow-hidden">
+                       <div className="absolute top-0 right-0 p-6 opacity-10 font-black text-6xl tracking-tighter italic">CONFIRM</div>
+                       <div className="space-y-4 relative z-10">
+                          <div className="flex justify-between border-b border-slate-800 pb-4">
+                             <span className="text-[10px] font-black text-slate-500 uppercase">Participant</span>
+                             <span className="text-sm font-bold text-white">{selectedUser?.name}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-slate-800 pb-4">
+                             <span className="text-[10px] font-black text-slate-500 uppercase">Expert</span>
+                             <span className="text-sm font-bold text-white uppercase">{selectedMentor?.name}</span>
+                          </div>
+                          <div className="flex justify-between">
+                             <span className="text-[10px] font-black text-slate-500 uppercase">Session Type</span>
+                             <span className="text-sm font-bold text-blue-400">{selectedCallType?.replace(/_/g, " ")}</span>
+                          </div>
+                       </div>
+                    </div>
+                    <div className="space-y-4">
+                       <input value={scheduleTitle} onChange={e => setScheduleTitle(e.target.value)} placeholder="CUSTOM SESSION TITLE" className="w-full bg-slate-900 border border-slate-800 rounded-2xl px-6 py-5 text-white font-bold text-xs focus:ring-4 focus:ring-blue-600/20 outline-none uppercase tracking-widest" />
+                       <textarea value={callNotes} onChange={e => setCallNotes(e.target.value)} placeholder="INTERNAL NOTES" rows={3} className="w-full bg-slate-900 border border-slate-800 rounded-2xl px-6 py-5 text-white font-medium text-xs focus:ring-4 focus:ring-blue-600/20 outline-none uppercase tracking-widest resize-none" />
+                    </div>
+                    <button type="submit" disabled={loading} className="w-full py-6 bg-blue-600 text-white font-black rounded-3xl hover:bg-blue-500 shadow-2xl shadow-blue-900/60 transition active:scale-95 disabled:opacity-50 uppercase tracking-widest text-xs">{loading ? "PROCESSING..." : "CONFIRM & DEPLOY SESSION"}</button>
+                  </form>
+                </div>
               )}
             </div>
-
-            <div className="flex justify-end gap-2 mt-4">
-              <button
-                type="button"
-                onClick={() => setActiveMeeting(null)}
-                className="rounded-lg border border-slate-600 bg-slate-800 text-slate-300 font-medium px-4 py-2 text-xs hover:bg-slate-700 transition"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMeetingToDelete(activeMeeting.id);
-                  setActiveMeeting(null);
-                }}
-                className="rounded-lg border border-red-500 bg-red-600 text-white font-medium px-4 py-2 text-xs hover:bg-red-500 transition"
-              >
-                Delete
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Delete meeting confirmation modal */}
-      {meetingToDelete !== null && (
-        <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
-          onClick={() => !deletingMeetingId && setMeetingToDelete(null)}
-        >
-          <div
-            className="rounded-2xl bg-slate-900 border border-slate-800 shadow-xl max-w-sm w-full p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-lg font-semibold text-white mb-2">Delete Meeting?</h3>
-            <p className="text-slate-400 text-sm mb-4">This action cannot be undone.</p>
-            <div className="flex gap-2 justify-end">
-              <button
-                type="button"
-                onClick={() => setMeetingToDelete(null)}
-                disabled={!!deletingMeetingId}
-                className="rounded-lg border border-slate-600 bg-slate-800 text-slate-300 font-medium px-4 py-2 hover:bg-slate-700 transition disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteCall}
-                disabled={!!deletingMeetingId}
-                className="rounded-lg border border-red-500 bg-red-600 text-white font-medium px-4 py-2 hover:bg-red-500 transition disabled:opacity-50"
-              >
-                {deletingMeetingId ? "Deleting..." : "Delete"}
-              </button>
-            </div>
+        {activeTab === "meetings" && (
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-500">
+             <div className="text-center space-y-2">
+                <h2 className="text-2xl font-black text-white italic">SESSION LOGS</h2>
+                <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Complete history of scheduled platform calls</p>
+             </div>
+             <div className="grid grid-cols-1 gap-4 max-w-4xl mx-auto">
+               {meetings.length === 0 ? (
+                 <div className="p-20 text-center bg-slate-900/50 rounded-[40px] border border-slate-800 border-dashed text-slate-500 font-black uppercase tracking-widest text-[10px]">No registry entries found.</div>
+               ) : (
+                 meetings.map(m => (
+                    <div key={m.id} className="p-8 rounded-[32px] bg-slate-900 border border-slate-800 hover:border-slate-700 transition flex items-center justify-between group shadow-xl">
+                       <div className="flex items-center gap-6">
+                          <div className="w-14 h-14 rounded-2xl bg-blue-600/10 flex items-center justify-center text-blue-400 font-black text-xs uppercase italic tracking-tighter">CAL</div>
+                          <div>
+                             <h3 className="font-bold text-white group-hover:text-blue-400 transition tracking-tight">{m.title}</h3>
+                             <p className="text-[10px] text-slate-600 font-black uppercase tracking-tighter mt-1">{DateTime.fromISO(m.startTime).toFormat("MMMM dd, hh:mm a")}</p>
+                          </div>
+                       </div>
+                       <span className="px-4 py-2 rounded-xl bg-emerald-500/10 text-emerald-400 text-[9px] font-black uppercase tracking-widest border border-emerald-500/20 shadow-lg">Confirmed</span>
+                    </div>
+                 ))
+               )}
+             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {showAddUserModal && (
-        <AddUserModal
-          onClose={() => setShowAddUserModal(false)}
-          onSuccess={(u) => {
-            loadUsers();
-            setSelectedUser(u);
-            setShowEditUserModal(true);
-          }}
-        />
-      )}
-      {showAddMentorModal && (
-        <AddMentorModal
-          onClose={() => setShowAddMentorModal(false)}
-          onSuccess={(m) => {
-            loadUsers();
-            setSelectedMentor(m);
-            setShowEditMentorModal(true);
-          }}
-        />
-      )}
+        {activeTab === "users" && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-8 duration-500">
+             <div className="space-y-6">
+                <div className="flex items-center justify-between px-2">
+                   <h2 className="text-xs font-black text-white uppercase tracking-[0.2em] italic">User Registry</h2>
+                   <button onClick={() => setShowAddUserModal(true)} className="text-[10px] font-black text-blue-400 hover:text-white transition uppercase tracking-widest">+ New Profile</button>
+                </div>
+                <div className="space-y-3">
+                   {users.map(u => (
+                      <div key={u.id} className="p-5 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between group hover:bg-slate-800/50 transition">
+                         <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-slate-500 font-black text-xs">{u.name[0]}</div>
+                            <span className="text-sm font-bold text-slate-300">{u.name}</span>
+                         </div>
+                         <button onClick={() => { setSelectedUser(u); setShowEditUserModal(true); }} className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-slate-500 hover:text-white transition shadow-lg shrink-0">✎</button>
+                      </div>
+                   ))}
+                </div>
+             </div>
+             <div className="space-y-6">
+                <div className="flex items-center justify-between px-2">
+                   <h2 className="text-xs font-black text-white uppercase tracking-[0.2em] italic">Mentor Registry</h2>
+                   <button onClick={() => setShowAddMentorModal(true)} className="text-[10px] font-black text-blue-400 hover:text-white transition uppercase tracking-widest">+ New Expert</button>
+                </div>
+                <div className="space-y-3">
+                   {mentors.map(m => (
+                      <div key={m.id} className="p-5 rounded-2xl bg-slate-900 border border-slate-800/80 flex items-center justify-between border-l-4 border-l-blue-600 group hover:bg-slate-800/50 transition">
+                         <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-xl bg-blue-600/10 flex items-center justify-center text-blue-400 font-black text-xs shadow-inner">{m.name[0]}</div>
+                            <span className="text-sm font-bold text-slate-300">{m.name}</span>
+                         </div>
+                         <button onClick={() => { setSelectedMentor(m); setShowEditMentorModal(true); }} className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-slate-500 hover:text-white transition shadow-lg shrink-0">✎</button>
+                      </div>
+                   ))}
+                </div>
+             </div>
+          </div>
+        )}
+      </div>
 
-      {showEditUserModal && (
-        <EditProfileModal
-          entity={selectedUser}
-          type="USER"
-          onClose={() => setShowEditUserModal(false)}
-          onSuccess={loadUsers}
-        />
-      )}
-
-      {showEditMentorModal && (
-        <EditProfileModal
-          entity={selectedMentor}
-          type="MENTOR"
-          onClose={() => setShowEditMentorModal(false)}
-          onSuccess={loadUsers}
-        />
-      )}
+      {/* Registry Modals */}
+      {showAddUserModal && <AddUserModal onClose={() => setShowAddUserModal(false)} onSuccess={loadUsers} />}
+      {showAddMentorModal && <AddMentorModal onClose={() => setShowAddMentorModal(false)} onSuccess={loadUsers} />}
+      {showEditUserModal && <EditProfileModal entity={selectedUser} type="USER" onClose={() => setShowEditUserModal(false)} onSuccess={loadUsers} />}
+      {showEditMentorModal && <EditProfileModal entity={selectedMentor} type="MENTOR" onClose={() => setShowEditMentorModal(false)} onSuccess={loadUsers} />}
     </div>
   );
 }
