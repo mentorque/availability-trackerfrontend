@@ -29,21 +29,21 @@ const SCORING_CONFIG = {
 
   // Call-type specific boosts
   CALL_TYPE_BOOSTS: {
-    resume_revamp: {
+    RESUME_REVAMP: {
       big_tech: 3,
       startup: 1,
       mid_size: 1,
     },
-    job_market_guidance: {
+    JOB_MARKET_GUIDANCE: {
       high_communication: 3,
       big_tech: 1,
       mid_size: 1,
     },
-    mock_interview: {
+    MOCK_INTERVIEW: {
       domain_match: 4,
       big_tech: 1,
     },
-    general_mentoring: {
+    GENERAL_MENTORING: {
       domain_match: 1,
       high_communication: 1,
     },
@@ -231,7 +231,7 @@ function scoreCommunication(communicationScore = 0) {
  * @param {number} communicationScore - Mentor's communication score
  * @returns {object} { score, boosts, details }
  */
-function scoreCallTypeSpecifics(callType = 'general_mentoring', companyType = '', communicationScore = 0) {
+function scoreCallTypeSpecifics(callType = 'GENERAL_MENTORING', companyType = '', communicationScore = 0) {
   const callTypeBoosts = SCORING_CONFIG.CALL_TYPE_BOOSTS[callType];
 
   if (!callTypeBoosts) {
@@ -249,7 +249,7 @@ function scoreCallTypeSpecifics(callType = 'general_mentoring', companyType = ''
   }
 
   // High communication boost for job market guidance
-  if (callType === 'job_market_guidance' &&
+  if (callType === 'JOB_MARKET_GUIDANCE' &&
       communicationScore >= SCORING_CONFIG.COMMUNICATION_HIGH_THRESHOLD &&
       callTypeBoosts.high_communication) {
     const boost = callTypeBoosts.high_communication;
@@ -258,7 +258,7 @@ function scoreCallTypeSpecifics(callType = 'general_mentoring', companyType = ''
   }
 
   // Domain match boost for mock interview
-  if (callType === 'mock_interview' && callTypeBoosts.domain_match) {
+  if (callType === 'MOCK_INTERVIEW' && callTypeBoosts.domain_match) {
     // This will be applied in main scoring if domain matches
     boosts.push(`Domain match boost available: +${callTypeBoosts.domain_match}`);
   }
@@ -277,7 +277,7 @@ function scoreCallTypeSpecifics(callType = 'general_mentoring', companyType = ''
  * @param {string} callType - Type of call
  * @returns {object} Scoring breakdown with total score
  */
-function calculateMentorScore(user, mentor, callType = 'general_mentoring') {
+function calculateMentorScore(user, mentor, callType = 'GENERAL_MENTORING') {
   if (!user || !mentor) {
     throw new Error('User and mentor profiles are required');
   }
@@ -286,13 +286,13 @@ function calculateMentorScore(user, mentor, callType = 'general_mentoring') {
     tagMatches: scoreTagMatches(user.tags, mentor.tags),
     keywordMatches: scoreKeywordMatches(user.description, mentor.description, user.domain),
     domainMatch: scoreDomainMatch(user.domain, mentor.domain),
-    communication: scoreCommunication(mentor.communication_score),
-    callTypeSpecifics: scoreCallTypeSpecifics(callType, mentor.company_type, mentor.communication_score),
+    communication: scoreCommunication(mentor.communicationScore || mentor.communication_score),
+    callTypeSpecifics: scoreCallTypeSpecifics(callType, mentor.companyType || mentor.company_type, mentor.communicationScore || mentor.communication_score),
   };
 
   // Apply additional domain match boost for mock_interview
-  if (callType === 'mock_interview' && scoring.domainMatch.match === true) {
-    const domainMatchBoost = SCORING_CONFIG.CALL_TYPE_BOOSTS.mock_interview.domain_match;
+  if (callType === 'MOCK_INTERVIEW' && scoring.domainMatch.match === true) {
+    const domainMatchBoost = SCORING_CONFIG.CALL_TYPE_BOOSTS.MOCK_INTERVIEW.domain_match;
     scoring.domainMatch.additionalBoost = domainMatchBoost;
   }
 
@@ -378,7 +378,7 @@ function calculateMatchPercentage(score, maxPossibleScore) {
  * @param {number} limit - Maximum number of recommendations
  * @returns {object[]} Sorted list of recommendations
  */
-export function recommendMentors(user, mentors, callType = 'general_mentoring', limit = 10) {
+export function recommendMentors(user, mentors, callType = 'GENERAL_MENTORING', limit = 10) {
   if (!user || !mentors || !Array.isArray(mentors)) {
     throw new Error('User profile and mentors array are required');
   }
@@ -398,8 +398,8 @@ export function recommendMentors(user, mentors, callType = 'general_mentoring', 
         name: mentor.name,
         tags: mentor.tags,
         domain: mentor.domain,
-        company_type: mentor.company_type,
-        communication_score: mentor.communication_score,
+        companyType: mentor.companyType || mentor.company_type,
+        communicationScore: mentor.communicationScore || mentor.communication_score,
         score: scoreData.totalScore,
         reasoning,
         scoreBreakdown: {
@@ -446,7 +446,7 @@ export function recommendMentors(user, mentors, callType = 'general_mentoring', 
  * @param {string} callType - Type of call
  * @returns {object} Detailed scoring breakdown
  */
-export function getMentorScoringDetails(user, mentor, callType = 'general_mentoring') {
+export function getMentorScoringDetails(user, mentor, callType = 'GENERAL_MENTORING') {
   const scoreData = calculateMentorScore(user, mentor, callType);
   const reasoning = buildReasoningExplanation(scoreData, mentor);
 

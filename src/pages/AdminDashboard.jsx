@@ -12,6 +12,7 @@ import {
 } from "../utils/time";
 import AddUserModal from "../components/AddUserModal";
 import AddMentorModal from "../components/AddMentorModal";
+import EditProfileModal from "../components/EditProfileModal";
 
 const TIMEZONE_OPTIONS = [
   { value: "UTC", label: "GMT (GMT+0)" },
@@ -62,6 +63,8 @@ export default function AdminDashboard() {
   const [success, setSuccess] = useState("");
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [showAddMentorModal, setShowAddMentorModal] = useState(false);
+  const [showEditUserModal, setShowEditUserModal] = useState(false);
+  const [showEditMentorModal, setShowEditMentorModal] = useState(false);
   const [meetingToDelete, setMeetingToDelete] = useState(null);
   const [deletingMeetingId, setDeletingMeetingId] = useState(null);
   const [activeMeeting, setActiveMeeting] = useState(null);
@@ -295,7 +298,7 @@ export default function AdminDashboard() {
       const startTime = scheduleStartDt.toFormat("HH:mm");
       const endTime = scheduleEndDt.toFormat("HH:mm");
       const timezone = displayTimezone === "IST" ? "Asia/Kolkata" : "UTC";
-      await callsApi.bookCall({
+      await adminApi.scheduleMeeting({
         title: scheduleTitle.trim(),
         date,
         startTime,
@@ -303,7 +306,7 @@ export default function AdminDashboard() {
         timezone,
         participantEmails: getParticipantEmails(),
       });
-      setSuccess("Call booked. Meet link will appear if Google is connected.");
+      setSuccess("Meeting scheduled successfully.");
       setScheduleTitle("");
       setScheduleStartHour("");
       setScheduleStartMinute("");
@@ -732,12 +735,12 @@ export default function AdminDashboard() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setShowAddUserModal(true)}
-                  disabled={!selectedUser}
-                  className="h-11 rounded-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:hover:bg-slate-800 text-white disabled:text-slate-500 font-medium px-4 transition inline-flex items-center gap-2"
-                  title="Add user"
+                  onClick={() => selectedUser ? setShowEditUserModal(true) : setShowAddUserModal(true)}
+                  className="h-11 rounded-full bg-blue-600 hover:bg-blue-500 text-white font-semibold px-6 shadow-lg shadow-blue-900/10 active:scale-95 transition inline-flex items-center gap-2"
+                  title={selectedUser ? "Edit metadata" : "Add new user"}
                 >
-                  <span aria-hidden>+</span> Add
+                  <span aria-hidden className="text-xl font-bold">{selectedUser ? "✎" : "+"}</span>
+                  {selectedUser ? "Edit" : "New"}
                 </button>
               </div>
             </div>
@@ -782,12 +785,12 @@ export default function AdminDashboard() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setShowAddMentorModal(true)}
-                  disabled={!selectedMentor}
-                  className="h-11 rounded-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:hover:bg-slate-800 text-white disabled:text-slate-500 font-medium px-4 transition inline-flex items-center gap-2"
-                  title="Add mentor"
+                  onClick={() => selectedMentor ? setShowEditMentorModal(true) : setShowAddMentorModal(true)}
+                  className="h-11 rounded-full bg-blue-600 hover:bg-blue-500 text-white font-semibold px-6 shadow-lg shadow-blue-900/10 active:scale-95 transition inline-flex items-center gap-2"
+                  title={selectedMentor ? "Edit metadata" : "Add new mentor"}
                 >
-                  <span aria-hidden>+</span> Add
+                  <span aria-hidden className="text-xl font-bold">{selectedMentor ? "✎" : "+"}</span>
+                  {selectedMentor ? "Edit" : "New"}
                 </button>
               </div>
             </div>
@@ -1432,19 +1435,39 @@ export default function AdminDashboard() {
       {showAddUserModal && (
         <AddUserModal
           onClose={() => setShowAddUserModal(false)}
-          onSuccess={(user) => {
-            setSelectedUser(user);
+          onSuccess={(u) => {
             loadUsers();
+            setSelectedUser(u);
+            setShowEditUserModal(true);
           }}
         />
       )}
       {showAddMentorModal && (
         <AddMentorModal
           onClose={() => setShowAddMentorModal(false)}
-          onSuccess={(mentor) => {
-            setSelectedMentor(mentor);
+          onSuccess={(m) => {
             loadUsers();
+            setSelectedMentor(m);
+            setShowEditMentorModal(true);
           }}
+        />
+      )}
+
+      {showEditUserModal && (
+        <EditProfileModal
+          entity={selectedUser}
+          type="USER"
+          onClose={() => setShowEditUserModal(false)}
+          onSuccess={loadUsers}
+        />
+      )}
+
+      {showEditMentorModal && (
+        <EditProfileModal
+          entity={selectedMentor}
+          type="MENTOR"
+          onClose={() => setShowEditMentorModal(false)}
+          onSuccess={loadUsers}
         />
       )}
     </div>

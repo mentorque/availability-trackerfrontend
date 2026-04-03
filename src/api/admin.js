@@ -13,55 +13,37 @@ export async function createUser(data) {
 }
 
 /**
- * @deprecated Use availabilityApi.getWeekly({ entity_id, entity_type, weekStart }) instead
- * This function is kept for backward compatibility only.
- * Get availability for an entity (user or mentor) - admin context only
+ * Update mentor profile metadata (tags, domain, description, companyType, communicationScore)
  */
-export async function getAvailabilityForEntity(entityId, entityType = "USER", weekStart) {
-  const q = new URLSearchParams({
-    entityType,
-    ...(weekStart && { weekStart }),
-  }).toString();
-  return get(`/api/admin/availability/${entityId}${q ? `?${q}` : ""}`);
+export async function updateMentorProfile(mentorId, data) {
+  const { put } = await import("./client.js");
+  return put(`/api/admin/mentors/${mentorId}`, data);
 }
 
 /**
- * Get availability for user (backward compatible wrapper)
- * @deprecated Use availabilityApi.getWeekly() instead
+ * Update user profile metadata (tags, domain, description)
+ */
+export async function updateUserProfile(userId, data) {
+  const { put } = await import("./client.js");
+  return put(`/api/admin/users/${userId}`, data);
+}
+
+/**
+ * Get availability for a user or mentor - admin context only
  */
 export async function getAvailabilityForUser(userId, weekStart) {
-  return getAvailabilityForEntity(userId, "USER", weekStart);
+  const q = weekStart ? `?weekStart=${weekStart}` : "";
+  return get(`/api/admin/availability/${userId}${q}`);
 }
 
 /**
- * Get overlapping slots for an entity (admin context only)
- * This remains in admin.js because overlap checking is typically admin functionality.
- * 
- * @param {string} entityId - UUID of user or mentor
- * @param {string} entityType - "USER" or "MENTOR" (default: "USER")
- * @param {string} startTime - ISO 8601 UTC start time
- * @param {string} endTime - ISO 8601 UTC end time
- */
-export async function getOverlappingSlotsForEntity(entityId, entityType = "USER", startTime, endTime) {
-  const q = new URLSearchParams({
-    entityType,
-    startTime,
-    endTime,
-  }).toString();
-  return get(`/api/admin/availability/${entityId}/overlap?${q}`);
-}
-
-/**
- * Get overlapping slots for user (backward compatible wrapper)
- * @deprecated Use getOverlappingSlotsForEntity instead
+ * Get overlapping slots between a user and time range
  */
 export async function getOverlappingSlots(userId, startTime, endTime) {
-  return getOverlappingSlotsForEntity(userId, "USER", startTime, endTime);
+  const q = new URLSearchParams({ startTime, endTime }).toString();
+  return get(`/api/admin/availability/${userId}/overlap?${q}`);
 }
 
-/**
- * @deprecated Use callsApi.bookCall() instead
- */
 export async function scheduleMeeting(data) {
   return post("/api/admin/meetings", data);
 }

@@ -8,9 +8,9 @@ import { formatDateLocal, formatTimeRange, isPastDateTime, formatTimeLocal } fro
 import Toast, { useToasts, ToastContainer } from "./Toast";
 
 const CALL_TYPES = [
-  { value: "resume_revamp", label: "Resume Revamp" },
-  { value: "job_market_guidance", label: "Job Market Guidance" },
-  { value: "mock_interview", label: "Mock Interview" },
+  { value: "RESUME_REVAMP", label: "Resume Revamp" },
+  { value: "JOB_MARKET_GUIDANCE", label: "Job Market Guidance" },
+  { value: "MOCK_INTERVIEW", label: "Mock Interview" },
 ];
 
 const TIMEZONE_OPTIONS = [
@@ -140,7 +140,7 @@ export default function AdminSchedulingDashboard() {
         // Convert to format for display
         const formatted = recommended.map((rec) => ({
           mentor: rec,
-          matchPercentage: rec.matchPercentage,
+          matchPercentage: rec.match_percentage,
           reasoning: rec.reasoning.join(" • "),
         }));
         setRecommendedMentors(formatted);
@@ -190,6 +190,7 @@ export default function AdminSchedulingDashboard() {
         ]);
 
         // Find overlapping slots
+        // API returns: { availability: { "YYYY-MM-DD": [{id, startTime, endTime}, ...] } }
         const overlaps = [];
         const userAvailMap = userAvail.availability || {};
         const mentorAvailMap = mentorAvail.availability || {};
@@ -197,24 +198,26 @@ export default function AdminSchedulingDashboard() {
         for (let i = 0; i < 7; i++) {
           const date = weekStartDt.plus({ days: i }).toFormat("yyyy-MM-dd");
 
-          for (let hour = 0; hour < 24; hour++) {
-            const key = `${hour}:00`;
-            const userSlotKey = `${date}|${hour}`;
-            const mentorSlotKey = `${date}|${hour}`;
+          const userSlots = userAvailMap[date] || [];
+          const mentorSlots = mentorAvailMap[date] || [];
 
-            const userAvailable = userAvailMap[userSlotKey] === true;
-            const mentorAvailable = mentorAvailMap[mentorSlotKey] === true;
+          // Build sets of start times for quick lookup
+          const userStartTimes = new Set(userSlots.map((s) => new Date(s.startTime).getTime()));
+          const mentorStartTimes = new Set(mentorSlots.map((s) => new Date(s.startTime).getTime()));
 
-            if (userAvailable && mentorAvailable) {
-              const slotStart = DateTime.fromISO(`${date}T${String(hour).padStart(2, "0")}:00:00Z`);
+          // Find start times present in both
+          for (const userSlot of userSlots) {
+            const slotStartMs = new Date(userSlot.startTime).getTime();
+            if (mentorStartTimes.has(slotStartMs)) {
+              const slotStartDt = DateTime.fromISO(userSlot.startTime, { zone: "utc" });
 
               // Skip past slots
-              if (slotStart > DateTime.now().toUTC()) {
+              if (slotStartDt > DateTime.now().toUTC()) {
                 overlaps.push({
                   date,
-                  hour,
-                  start: slotStart,
-                  end: slotStart.plus({ hours: 1 }),
+                  start: slotStartDt,
+                  end: slotStartDt.plus({ hours: 1 }),
+                  userSlotId: userSlot.id,
                 });
               }
             }
@@ -252,8 +255,8 @@ export default function AdminSchedulingDashboard() {
 
   // Book the call
   const handleConfirmBooking = async () => {
-    if (!selectedUser || !selectedMentor || !selectedSlot) {
-      const errorMsg = "Missing required information";
+    if (!selectedUser || !selectedMentor || !selectedSlot || !selectedCallType) {
+      const errorMsg = "Missing required information (User, Mentor, Slot, or Call Type)";
       setBookingError(errorMsg);
       addToast(errorMsg, "error", 0);
       return;
@@ -265,13 +268,11 @@ export default function AdminSchedulingDashboard() {
       setBookingSuccess("");
 
       const callData = {
-        user_id: selectedUser.id,
-        mentor_id: selectedMentor.id,
-        call_type: selectedCallType,
-        start_time: selectedSlot.start.toISO(),
-        end_time: selectedSlot.end.toISO(),
-        status: "scheduled",
-        additional_participants: [],
+        userId: selectedUser.id,
+        mentorId: selectedMentor.mentor?.id || selectedMentor.id,
+        callType: selectedCallType,
+        startTime: selectedSlot.start.toISO(),
+        endTime: selectedSlot.end.toISO(),
       };
 
       await callsApi.bookCall(callData);

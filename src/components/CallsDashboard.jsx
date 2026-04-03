@@ -10,17 +10,16 @@ const TIMEZONE_OPTIONS = [
 ];
 
 const CALL_TYPE_LABELS = {
-  resume_revamp: "Resume Revamp",
-  job_market_guidance: "Job Market Guidance",
-  mock_interview: "Mock Interview",
-  general_mentoring: "General Mentoring",
+  RESUME_REVAMP: "Resume Revamp",
+  JOB_MARKET_GUIDANCE: "Job Market Guidance",
+  MOCK_INTERVIEW: "Mock Interview",
 };
 
 const STATUS_COLORS = {
-  scheduled: { bg: "bg-blue-900/30", border: "border-blue-700", text: "text-blue-300", label: "Scheduled" },
-  completed: { bg: "bg-green-900/30", border: "border-green-700", text: "text-green-300", label: "Completed" },
-  cancelled: { bg: "bg-red-900/30", border: "border-red-700", text: "text-red-300", label: "Cancelled" },
-  in_progress: { bg: "bg-purple-900/30", border: "border-purple-700", text: "text-purple-300", label: "In Progress" },
+  SCHEDULED:   { bg: "bg-blue-900/30",   border: "border-blue-700",   text: "text-blue-300",   label: "Scheduled" },
+  COMPLETED:   { bg: "bg-green-900/30",  border: "border-green-700",  text: "text-green-300",  label: "Completed" },
+  CANCELLED:   { bg: "bg-red-900/30",    border: "border-red-700",    text: "text-red-300",    label: "Cancelled" },
+  IN_PROGRESS: { bg: "bg-purple-900/30", border: "border-purple-700", text: "text-purple-300", label: "In Progress" },
 };
 
 export default function CallsDashboard() {
@@ -52,40 +51,34 @@ export default function CallsDashboard() {
     }
   }, []);
 
-  // Filter calls based on role
+  // Filter calls based on role (backend already filters, this is a safety net)
   const roleFilteredCalls = useMemo(() => {
     if (!authUser || !calls.length) return [];
 
     if (authUser.role === "ADMIN") {
-      // Admin sees all calls
       return calls;
     } else if (authUser.role === "USER") {
-      // User sees calls where they are the user
-      return calls.filter((call) => call.user_id === authUser.id);
+      return calls.filter((call) => call.userId === authUser.id);
     } else if (authUser.role === "MENTOR") {
-      // Mentor sees calls where they are the mentor
-      return calls.filter((call) => call.mentor_id === authUser.id);
+      return calls.filter((call) => call.mentorId === authUser.id);
     }
-
     return [];
   }, [calls, authUser]);
 
   // Apply status filter
   const statusFilteredCalls = useMemo(() => {
     if (statusFilter === "all") return roleFilteredCalls;
-    return roleFilteredCalls.filter((call) => call.status === statusFilter);
+    return roleFilteredCalls.filter((call) => call.status === statusFilter.toUpperCase());
   }, [roleFilteredCalls, statusFilter]);
 
   // Apply search filter
   const searchFilteredCalls = useMemo(() => {
     if (!searchQuery.trim()) return statusFilteredCalls;
-
     const query = searchQuery.toLowerCase();
     return statusFilteredCalls.filter((call) => {
-      const userName = (call.user_name || "").toLowerCase();
-      const mentorName = (call.mentor_name || "").toLowerCase();
-      const callType = (call.call_type || "").toLowerCase();
-
+      const userName = (call.user?.name || "").toLowerCase();
+      const mentorName = (call.mentor?.name || "").toLowerCase();
+      const callType = (call.callType || "").toLowerCase();
       return userName.includes(query) || mentorName.includes(query) || callType.includes(query);
     });
   }, [statusFilteredCalls, searchQuery]);
@@ -93,34 +86,29 @@ export default function CallsDashboard() {
   // Apply sorting
   const sortedCalls = useMemo(() => {
     const sorted = [...searchFilteredCalls];
-
     if (sortBy === "date-asc") {
-      sorted.sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+      sorted.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
     } else if (sortBy === "date-desc") {
-      sorted.sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
+      sorted.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
     } else if (sortBy === "name") {
-      sorted.sort((a, b) => (a.user_name || "").localeCompare(b.user_name || ""));
+      sorted.sort((a, b) => (a.user?.name || "").localeCompare(b.user?.name || ""));
     }
-
     return sorted;
   }, [searchFilteredCalls, sortBy]);
 
-  // Get status of each call (scheduled, in_progress, completed, cancelled)
+  // Derive display status
   const getCallStatus = (call) => {
-    if (call.status === "cancelled") return "cancelled";
-    if (call.status === "completed") return "completed";
-
-    if (call.start_time && call.end_time) {
+    if (call.status === "CANCELLED") return "CANCELLED";
+    if (call.status === "COMPLETED") return "COMPLETED";
+    if (call.startTime && call.endTime) {
       const now = DateTime.now().toUTC();
-      const startTime = DateTime.fromISO(call.start_time, { zone: "UTC" });
-      const endTime = DateTime.fromISO(call.end_time, { zone: "UTC" });
-
-      if (now < startTime) return "scheduled";
-      if (now >= startTime && now < endTime) return "in_progress";
-      if (now >= endTime) return "completed";
+      const startTime = DateTime.fromISO(call.startTime, { zone: "utc" });
+      const endTime = DateTime.fromISO(call.endTime, { zone: "utc" });
+      if (now < startTime) return "SCHEDULED";
+      if (now >= startTime && now < endTime) return "IN_PROGRESS";
+      if (now >= endTime) return "COMPLETED";
     }
-
-    return call.status || "scheduled";
+    return call.status || "SCHEDULED";
   };
 
   // Stats for header
@@ -272,35 +260,33 @@ export default function CallsDashboard() {
                     <tr key={call.id || idx} className="border-b border-slate-800 hover:bg-slate-900/50 transition">
                       <td className="px-6 py-4 text-sm text-slate-200">
                         <div>
-                          <p className="font-medium">{call.user_name || "Unknown User"}</p>
-                          <p className="text-xs text-slate-500">{call.user_email || ""}</p>
+                          <p className="font-medium">{call.user?.name || "Unknown User"}</p>
+                          <p className="text-xs text-slate-500">{call.user?.email || ""}</p>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-200">
                         <div>
-                          <p className="font-medium">{call.mentor_name || "Unknown Mentor"}</p>
-                          <p className="text-xs text-slate-500">{call.mentor_email || ""}</p>
+                          <p className="font-medium">{call.mentor?.name || "Unknown Mentor"}</p>
+                          <p className="text-xs text-slate-500">{call.mentor?.email || ""}</p>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm">
                         <div>
                           <p className="text-slate-200">
-                            {call.start_time ? formatDateLocal(call.start_time.split("T")[0], displayTimezone) : "—"}
+                            {call.startTime ? formatDateLocal(call.startTime.split("T")[0], displayTimezone) : "—"}
                           </p>
                           <p className="text-xs text-slate-400">
-                            {call.start_time && call.end_time
-                              ? `${formatTimeLocal(call.start_time, displayTimezone, "short")} - ${formatTimeLocal(call.end_time, displayTimezone, "short")}`
+                            {call.startTime && call.endTime
+                              ? `${formatTimeLocal(call.startTime, displayTimezone)} – ${formatTimeLocal(call.endTime, displayTimezone)}`
                               : "—"}
                           </p>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-300">
-                        {CALL_TYPE_LABELS[call.call_type] || call.call_type || "—"}
+                        {CALL_TYPE_LABELS[call.callType] || call.callType || "—"}
                       </td>
                       <td className="px-6 py-4 text-sm">
-                        <span
-                          className={`inline-block px-3 py-1 rounded-full border text-xs font-medium ${statusConfig.bg} ${statusConfig.border} ${statusConfig.text}`}
-                        >
+                        <span className={`inline-block px-3 py-1 rounded-full border text-xs font-medium ${statusConfig.bg} ${statusConfig.border} ${statusConfig.text}`}>
                           {statusConfig.label}
                         </span>
                       </td>
@@ -316,51 +302,37 @@ export default function CallsDashboard() {
             {sortedCalls.map((call, idx) => {
               const status = getCallStatus(call);
               const statusConfig = STATUS_COLORS[status];
-
               return (
                 <div key={call.id || idx} className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
-                  {/* Status Badge */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1">
-                      <p className="font-semibold text-white">{call.user_name || "Unknown User"}</p>
-                      <p className="text-xs text-slate-400">{call.user_email || ""}</p>
+                      <p className="font-semibold text-white">{call.user?.name || "Unknown User"}</p>
+                      <p className="text-xs text-slate-400">{call.user?.email || ""}</p>
                     </div>
-                    <span
-                      className={`shrink-0 inline-block px-2 py-1 rounded-full border text-xs font-medium ${statusConfig.bg} ${statusConfig.border} ${statusConfig.text}`}
-                    >
+                    <span className={`shrink-0 inline-block px-2 py-1 rounded-full border text-xs font-medium ${statusConfig.bg} ${statusConfig.border} ${statusConfig.text}`}>
                       {statusConfig.label}
                     </span>
                   </div>
-
-                  {/* Mentor Info */}
                   <div className="border-t border-slate-700 pt-3">
                     <p className="text-xs text-slate-400 mb-1">Mentor</p>
-                    <p className="font-medium text-slate-200">{call.mentor_name || "Unknown Mentor"}</p>
-                    <p className="text-xs text-slate-500">{call.mentor_email || ""}</p>
+                    <p className="font-medium text-slate-200">{call.mentor?.name || "Unknown Mentor"}</p>
+                    <p className="text-xs text-slate-500">{call.mentor?.email || ""}</p>
                   </div>
-
-                  {/* Date & Time */}
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
                       <p className="text-xs text-slate-400 mb-1">Date</p>
-                      <p className="text-slate-200">
-                        {call.start_time ? formatDateLocal(call.start_time.split("T")[0], displayTimezone) : "—"}
-                      </p>
+                      <p className="text-slate-200">{call.startTime ? formatDateLocal(call.startTime.split("T")[0], displayTimezone) : "—"}</p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-400 mb-1">Time</p>
                       <p className="text-slate-200">
-                        {call.start_time && call.end_time
-                          ? `${formatTimeLocal(call.start_time, displayTimezone, "short")} - ${formatTimeLocal(call.end_time, displayTimezone, "short")}`
-                          : "—"}
+                        {call.startTime && call.endTime ? `${formatTimeLocal(call.startTime, displayTimezone)} – ${formatTimeLocal(call.endTime, displayTimezone)}` : "—"}
                       </p>
                     </div>
                   </div>
-
-                  {/* Call Type */}
                   <div className="border-t border-slate-700 pt-3">
                     <p className="text-xs text-slate-400 mb-1">Call Type</p>
-                    <p className="text-slate-200">{CALL_TYPE_LABELS[call.call_type] || call.call_type || "—"}</p>
+                    <p className="text-slate-200">{CALL_TYPE_LABELS[call.callType] || call.callType || "—"}</p>
                   </div>
                 </div>
               );

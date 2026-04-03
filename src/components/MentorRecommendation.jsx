@@ -14,7 +14,7 @@ export default function MentorRecommendation({
   maxRecommendations = 5,
   showScoringDetails = true,
 }) {
-  const [selectedCallType, setSelectedCallType] = useState('general_mentoring');
+  const [selectedCallType, setSelectedCallType] = useState('RESUME_REVAMP');
   const [expandedMentorId, setExpandedMentorId] = useState(null);
   const [showScoringBreakdown, setShowScoringBreakdown] = useState(null);
 
@@ -118,7 +118,7 @@ export default function MentorRecommendation({
                     </div>
                     <div className="flex flex-wrap gap-2 mb-2">
                       <span className="text-xs px-2 py-1 rounded bg-slate-800 text-slate-300">
-                        {mentor.company_type}
+                        {mentor.companyType}
                       </span>
                       <span className="text-xs px-2 py-1 rounded bg-slate-800 text-slate-300">
                         {mentor.domain}
@@ -129,7 +129,7 @@ export default function MentorRecommendation({
                   {/* Score Display */}
                   <div className="text-right ml-4">
                     <div className="text-3xl font-bold text-green-400">
-                      {mentor.match_percentage.toFixed(0)}%
+                      {mentor.match_percentage?.toFixed(0) || 0}%
                     </div>
                     <div className="text-xs text-slate-400">Match</div>
                     <div className="text-xs text-slate-500 mt-1">Score: {mentor.score.toFixed(1)}</div>
@@ -161,14 +161,14 @@ export default function MentorRecommendation({
                       <div
                         key={i}
                         className={`w-2 h-2 rounded-full ${
-                          i <= Math.round(mentor.communication_score)
+                          i <= Math.round(mentor.communicationScore)
                             ? 'bg-yellow-400'
                             : 'bg-slate-700'
                         }`}
                       />
                     ))}
                   </div>
-                  <span className="text-sm text-slate-300 ml-2">{mentor.communication_score.toFixed(1)}/5</span>
+                  <span className="text-sm text-slate-300 ml-2">{(mentor.communicationScore || 0).toFixed(1)}/5</span>
                 </div>
 
                 {/* Quick Reasons */}

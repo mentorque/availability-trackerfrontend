@@ -9,20 +9,17 @@ export function AuthProvider({ children }) {
 
   const loadUser = useCallback(async () => {
     const token = localStorage.getItem("token");
-
     if (!token) {
       setUser(null);
       setLoading(false);
       return;
     }
-
     try {
       const { user: u } = await authApi.me();
       setUser(u);
       if (u?.email) localStorage.setItem("userEmail", u.email);
     } catch (err) {
       console.warn("[AuthContext] /me failed:", err?.message);
-      // Clear auth if token validation fails
       localStorage.removeItem("token");
       localStorage.removeItem("userEmail");
       setUser(null);
@@ -43,14 +40,6 @@ export function AuthProvider({ children }) {
     return u;
   }, []);
 
-  const register = useCallback(async (data) => {
-    const { user: u, token } = await authApi.register(data);
-    localStorage.setItem("token", token);
-    if (u?.email) localStorage.setItem("userEmail", u.email);
-    setUser(u);
-    return u;
-  }, []);
-
   const logout = useCallback(() => {
     localStorage.removeItem("token");
     localStorage.removeItem("userEmail");
@@ -58,7 +47,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser: loadUser }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser: loadUser }}>
       {children}
     </AuthContext.Provider>
   );
