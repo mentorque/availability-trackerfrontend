@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
+import Landing from "./pages/Landing";
 import UserAvailability from "./pages/UserAvailability";
 import UserCalls from "./pages/UserCalls";
 import MentorAvailability from "./pages/MentorAvailability";
@@ -107,7 +108,7 @@ export default function App() {
       />
 
       {/* Catch-all & redirects */}
-      <Route path="/" element={<RootRedirect />} />
+      <Route path="/" element={<Landing />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

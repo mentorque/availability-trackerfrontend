@@ -6,6 +6,8 @@ import * as callsApi from "../api/calls";
 import { recommendMentors } from "../utils/mentorRecommendation";
 import { formatDateLocal, formatTimeRange, isPastDateTime, formatTimeLocal } from "../utils/time";
 import Toast, { useToasts, ToastContainer } from "./Toast";
+import LoadingSkeleton, { Spinner } from "./LoadingSkeleton";
+import { motion, AnimatePresence } from "framer-motion";
 
 const CALL_TYPES = [
   { value: "RESUME_REVAMP", label: "Resume Revamp" },
@@ -440,11 +442,14 @@ function Step1UserSelection({ users, loadingUsers, usersError, onSelectUser }) {
       )}
 
       {loadingUsers ? (
-        <div className="text-center py-12">
-          <div className="flex items-center justify-center mb-4">
-            <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full" />
+        <div className="space-y-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="h-10 w-full bg-slate-950 border border-slate-700 rounded-lg animate-pulse" />
           </div>
-          <p className="text-slate-400">Loading users...</p>
+          <LoadingSkeleton type="table" count={5} />
+          <div className="flex justify-center py-4">
+            <Spinner size="md" text="Fetching candidates..." />
+          </div>
         </div>
       ) : users.length === 0 ? (
         <div className="text-center py-12 bg-slate-900/30 border border-slate-700 rounded-lg">
@@ -546,8 +551,12 @@ function Step3MentorRecommendations({
           <h2 className="text-2xl font-bold text-white mb-2">Step 3: Recommended Mentors</h2>
           <p className="text-slate-400">Finding the best mentors for this call type...</p>
         </div>
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full" />
+        <div className="space-y-4">
+          <LoadingSkeleton type="card" count={3} />
+          <div className="flex flex-col items-center justify-center py-8">
+            <Spinner size="lg" text="Running recommendation engine..." />
+            <p className="text-xs text-slate-500 mt-2 animate-pulse">Matching skills, domains & communication scores</p>
+          </div>
         </div>
       </div>
     );
@@ -709,10 +718,13 @@ function Step5AvailableSlots({
         </div>
       )}
 
-      {sortedDates.length === 0 && !slotsError ? (
-        <div className="text-center py-12 bg-slate-900/30 border border-slate-700 rounded-lg">
-          <p className="text-slate-400 mb-2">🔄 Checking availability...</p>
-          <p className="text-sm text-slate-500">This should only take a moment</p>
+      {loadingSlots ? (
+        <div className="space-y-4">
+          <LoadingSkeleton type="table" count={4} />
+          <div className="flex flex-col items-center justify-center py-10 bg-slate-900/30 border border-slate-700 rounded-lg">
+            <Spinner size="lg" text="Analyzing calendars..." />
+            <p className="text-xs text-slate-500 mt-2 animate-pulse">Running intersection algorithms on mentor & candidate availability</p>
+          </div>
         </div>
       ) : sortedDates.length > 0 ? (
         <div className="space-y-3 mb-6 max-h-96 overflow-y-auto">
@@ -833,10 +845,7 @@ function Step7ConfirmBooking({
           className="flex-1 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-lg transition font-semibold flex items-center justify-center gap-2"
         >
           {bookingInProgress ? (
-            <>
-              <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
-              Booking...
-            </>
+            <Spinner size="sm" text="Booking..." inline />
           ) : (
             "✓ Confirm Booking"
           )}
