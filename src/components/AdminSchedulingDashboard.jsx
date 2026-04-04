@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { DateTime } from "luxon";
-import * as adminApi from "../api/admin";
+import { usersApi, mentorsApi } from "../api/client";
 import * as availabilityApi from "../api/availability";
 import * as callsApi from "../api/calls";
 import { recommendMentors } from "../utils/mentorRecommendation";
@@ -71,8 +71,8 @@ export default function AdminSchedulingDashboard() {
         setLoadingUsers(true);
         setUsersError("");
         const [usersList, mentorsList] = await Promise.all([
-          adminApi.listUsers(),
-          adminApi.listMentors(),
+          usersApi.getAll(),
+          mentorsApi.getAll(),
         ]);
         
         // Edge case: No users found

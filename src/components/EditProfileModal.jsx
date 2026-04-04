@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import * as adminApi from "../api/admin";
+import { usersApi, mentorsApi } from "../api/client";
 
 /**
  * EditProfileModal
@@ -41,9 +41,9 @@ export default function EditProfileModal({ entity, type = "USER", onClose, onSuc
       if (type === "MENTOR") {
         data.companyType = companyType || null;
         data.communicationScore = parseFloat(communicationScore) || 0;
-        await adminApi.updateMentorProfile(entity.id, data);
+        await mentorsApi.update(entity.id, data);
       } else {
-        await adminApi.updateUserProfile(entity.id, data);
+        await usersApi.update(entity.id, data);
       }
 
       onSuccess?.();

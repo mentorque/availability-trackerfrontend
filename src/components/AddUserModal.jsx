@@ -1,5 +1,5 @@
 import { useState } from "react";
-import * as adminApi from "../api/admin";
+import { usersApi } from "../api/client";
 
 export default function AddUserModal({ onClose, onSuccess }) {
   const [name, setName] = useState("");
@@ -21,7 +21,7 @@ export default function AddUserModal({ onClose, onSuccess }) {
     }
     setLoading(true);
     try {
-      const user = await adminApi.createUser({
+      const user = await usersApi.create({
         name: name.trim() || undefined,
         email: email.trim(),
         password,

@@ -12,7 +12,10 @@ function clearAuthAndRedirectToLogin(expired = false) {
 }
 
 export async function api(method, path, body, options = {}) {
-  const url = path.startsWith("http") ? path : `${API_URL}${path}`;
+  // Normalize URL to prevent double slashes (e.g., https://api.com//api/login)
+  const baseUrl = API_URL.endsWith("/") ? API_URL.slice(0, -1) : API_URL;
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  const url = path.startsWith("http") ? path : `${baseUrl}${cleanPath}`;
   const headers = {
     "Content-Type": "application/json",
     ...options.headers,
