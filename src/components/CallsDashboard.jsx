@@ -107,12 +107,13 @@ export default function CallsDashboard() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-10 animate-in">
-      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight text-white capitalize">
+      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 pb-4">
+        <div className="space-y-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 mb-2">Activity Registry</div>
+          <h1 className="text-4xl font-black tracking-tighter text-white uppercase italic">
             {authUser?.role === "MENTOR" ? "Session Log" : "My Calls"}
           </h1>
-          <p className="text-slate-500 text-sm font-medium">Historical registry of platform interactions</p>
+          <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.3em]">Historical archive of platform interactions</p>
         </div>
 
         <div className="flex gap-4">
