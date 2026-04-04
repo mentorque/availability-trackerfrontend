@@ -41,7 +41,12 @@ export default function Availability() {
       base.setUTCDate(base.getUTCDate() + weekOffset * 7);
       const weekStartStr = getWeekStartStr(base);
 
-      const res = await availabilityApi.getWeekly({ weekStart: weekStartStr });
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+      const entity = { entity_id: user.id, entity_type: user.role === "MENTOR" ? "MENTOR" : "USER" };
+      const res = await availabilityApi.getWeekly({ weekStart: weekStartStr, ...entity });
       setData(res);
       setToggles({});
     } catch (e) {
@@ -102,7 +107,24 @@ export default function Availability() {
       return;
     }
     try {
-      await availabilityApi.saveBatch(slots);
+      // dedupe slots by start/end before sending
+      const dedupeSlots = (input) => {
+        const m = new Map();
+        for (const s of input) {
+          const k = `${s.startTime}|${s.endTime}`;
+          if (!m.has(k)) m.set(k, { ...s });
+          else {
+            const ex = m.get(k);
+            ex.enabled = ex.enabled || s.enabled;
+            m.set(k, ex);
+          }
+        }
+        return Array.from(m.values());
+      };
+
+      const payload = dedupeSlots(slots);
+      const entity = { entity_id: user.id, entity_type: user.role === "MENTOR" ? "MENTOR" : "USER" };
+      await availabilityApi.saveBatch(payload, entity);
       await fetchWeekly();
       setToggles({});
     } catch (e) {

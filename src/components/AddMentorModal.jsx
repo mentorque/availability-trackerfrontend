@@ -1,5 +1,5 @@
 import { useState } from "react";
-import * as adminApi from "../api/admin";
+import { mentorsApi } from "../api/client";
 
 export default function AddMentorModal({ onClose, onSuccess }) {
   const [name, setName] = useState("");
@@ -21,7 +21,7 @@ export default function AddMentorModal({ onClose, onSuccess }) {
     }
     setLoading(true);
     try {
-      const mentor = await adminApi.createUser({
+      const mentor = await mentorsApi.create({
         name: name.trim() || undefined,
         email: email.trim(),
         password,

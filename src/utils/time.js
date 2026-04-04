@@ -5,11 +5,10 @@
 import { DateTime } from "luxon";
 
 function resolveIanaZone(timezone) {
-  // Never hardcode offsets; always use IANA zones so DST is handled automatically.
+  // Map display timezone names to IANA timezone identifiers
+  // IANA zones handle DST automatically
+  if (timezone === "UTC") return "UTC";
   if (timezone === "IST") return "Asia/Kolkata";
-  // In this app, the "UTC/GMT" option is used for Ireland/UK-style time.
-  // Use Europe/Dublin so Ireland DST (IST / Irish Summer Time) is handled.
-  if (timezone === "UTC") return "Europe/Dublin";
   return timezone || "UTC";
 }
 
